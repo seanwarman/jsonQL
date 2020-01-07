@@ -1,19 +1,20 @@
 {
-  "name": "jsonql",
+  "name": "@seanwarman/jsonql",
   "version": "1.0.0",
   "description": "A small framework for building MYSQL queries with json objects.",
   "main": "index.js",
-  "dependencies": {
-    "mysql2": "^2.1.0"
-  },
-  "devDependencies": {},
   "scripts": {
-    "test": "node jsonQl/test.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/seanwarman/jsonQL.git"
   },
+  "keywords": [
+    "json",
+    "mysql",
+    "database"
+  ],
   "author": "Sean Warman",
   "license": "MIT",
   "bugs": {
