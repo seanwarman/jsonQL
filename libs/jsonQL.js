@@ -17,45 +17,53 @@ module.exports = class jsonQL {
   }
   selectQL(jsonQuery) {
     this.init(jsonQuery)
+    if(this.fatalError) return this.fatalError;
     return this.selectQuery();
   }
-  createQL(jsonQuery) {
-    this.init(jsonQuery)
+  createQL(jsonQuery, data) {
+    this.init(jsonQuery, data)
+    if(this.fatalError) return this.fatalError;
     return this.createQuery();
   }
-  updateQL(jsonQuery) {
-    this.init(jsonQuery)
+  updateQL(jsonQuery, data) {
+    this.init(jsonQuery, data)
+    if(this.fatalError) return this.fatalError;
     return this.updateQuery();
   }
   deleteQL(jsonQuery) {
     this.init(jsonQuery);
+    if(this.fatalError) return this.fatalError;
     return this.deleteQuery();
   }
   
-  init(jsonQuery) {
+  init(jsonQuery, data = null) {
     this.jsonQuery = jsonQuery;
     this.primaryDBName = jsonQuery.database;
     this.primaryTableName = jsonQuery.table;
+    
+    this.data = data;
 
     this.primaryDBSchema = this.schema[this.primaryDBName]
     if (!this.primaryDBSchema) {
-      this.fatalError = {status: 'error', message: 'This primary table name was not found in the schema: ' + this.primaryDBName};
+      this.fatalError = {status: 'error', message: 'This primary database name was not found in the schema: ' + this.primaryDBName};
+      return;
     }
 
     this.primaryTableSchema = this.primaryDBSchema[this.primaryTableName]
     if (!this.primaryTableSchema) {
       this.fatalError = {status: 'error', message: `The table named: ${this.primaryTableName}, could not be found in: ${this.primaryDBName}.`}
+      return;
     }
 
     this.fromString = `FROM ${this.primaryDBName}.${this.primaryTableName}`
   }
   
-  createQuery(jsonQuery = this.jsonQuery) {
+  createQuery(jsonQuery = this.jsonQuery, data = this.data) {
 
     this.insert(
       jsonQuery.database, 
       jsonQuery.table, 
-      jsonQuery.data
+      data
     );
 
     if(this.fatalError) {
@@ -104,11 +112,11 @@ module.exports = class jsonQL {
     return {status: 'success', query: this.queryString, message: 'Query successful', errors: this.errors.join(' and ')};
   }
 
-  updateQuery(jsonQuery = this.jsonQuery) {
+  updateQuery(jsonQuery = this.jsonQuery, data = this.data) {
     this.update(
       jsonQuery.database, 
       jsonQuery.table, 
-      jsonQuery.data
+      data
     )
       
     this.where(
@@ -159,10 +167,13 @@ module.exports = class jsonQL {
   update(database, table, data) {
     this.updateString = `UPDATE ${database}.${table} SET ${Object.keys(data).filter(col => {
       if(!this.schemaValid(database, table, col)) return false;
+      if(data[col] === null) return false;
+      if(data[col] === undefined) return false;
       return true
     })
     .map(col => {
-      if(typeof data[col] === 'string') return `${col} = '${data[col]}'`
+      // If a string make sure you add single quotes, if length is 0 replace value with NULL...
+      if(typeof data[col] === 'string') return data[col].length > 0 ? `${col} = '${data[col]}'` : `${col} = NULL` 
       if(typeof data[col] === 'number') return `${col} = ${data[col]}`
     }).join()}`
   }
