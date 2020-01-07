@@ -250,13 +250,13 @@ module.exports = class jsonQL {
           return this.schemaValid(database, table, orObj.name)
         })
         .map(orObj => {
-          return `${orObj.name} ${orObj.is ? `= '${orObj.is}'` : `!= '${orObj.isnot}'`}` 
+          return `${database}.${table}.${orObj.name} ${orObj.is ? `= '${orObj.is}'` : `!= '${orObj.isnot}'`}` 
         })
         .join(' OR ');
         if(or.length > 0) return str + `(${or})`;
         return str;
       } else {
-        return str + `${whereObj.name} ${whereObj.is ? `= '${whereObj.is}'` : `!= '${whereObj.isnot}'`}`;
+        return str + `${database}.${table}.${whereObj.name} ${whereObj.is ? `= '${whereObj.is}'` : `!= '${whereObj.isnot}'`}`;
       }
       
     },'')

@@ -11,24 +11,25 @@ async function example() {
   // this query breaks the join...
   let queryObj = jsonQL.selectQL({ 
     database: 'bms_booking',
-  table: 'divisionTemplates',
-  columns: [
-    {name: 'tmpDivKey'},
-    {name: 'tmpName'},
-    {name: 'tmpKey'},
-    {name: 'colorLabel'},
-    {name: 'jsonForm'},
-    {name: 'bookingDivKey'},
-    {join: {
-      database: 'bms_booking',
-      table: 'bookingDivisions',
-      columns: [{name: 'jsonStatus'}],
-      where: {parent: 'bookingDivKey', is: 'bookingDivKey', as: 'bookDivK'}
-    }}
-  ],
-  where: [
-    {name: 'bookingDivKey', is: this.props.match.params.bookingDivKey}
-  ]});
+    table: 'divisionTemplates',
+    columns: [
+      {name: 'tmpDivKey'},
+      {name: 'tmpName'},
+      {name: 'tmpKey'},
+      {name: 'colorLabel'},
+      {name: 'jsonForm'},
+      {name: 'bookingDivKey'},
+      {join: {
+        database: 'bms_booking',
+        table: 'bookingDivisions',
+        columns: [{name: 'jsonStatus'}],
+        where: {parent: 'bookingDivKey', is: 'bookingDivKey'}
+      }}
+    ],
+    where: [
+      {name: 'bookingDivKey', is: '8f89da60-c000-11e9-a59f-2908dddb96a9'}
+    ]
+  });
   // let queryObj = jsonQL.createQL(jsonQueries.createBooking);
   // let queryObj = jsonQL.updateQL(jsonQueries.updateBooking);
   // let queryObj = jsonQL.deleteQL(jsonQueries.deleteBooking);
@@ -46,6 +47,7 @@ async function example() {
     result = await con.query(queryObj.query)
   } catch (err) {
     console.log(err)
+    await con.end()
   }
   console.log('result :', result[0]);
   await con.end()
