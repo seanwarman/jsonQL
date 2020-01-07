@@ -6,7 +6,7 @@ module.exports = {
   bms_scribr: require('./bms_scribr'),
   bms_seo: require('./bms_seo/index'),
   bms_wordlabs: require('./bms_wordlabs'),
-  notify: require('./notify/index'),
-  siteping: require('./siteping/index'),
-  sitespot: require('./sitespot/index'),
+  bms_notify: require('./bms_notify/index'),
+  bms_siteping: require('./bms_siteping/index'),
+  bms_sitespot: require('./bms_sitespot/index'),
 }
