@@ -39,6 +39,8 @@ WHERE
 So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it to replace
 hundreds of potential endpoints.
 
+**Note**: to return all the columns (eg `SELECT *`) just omit the columns param.
+
 ### Where
 
 You'll notice `where` is an array. That's so we can add extra ones for multiple ANDs.
