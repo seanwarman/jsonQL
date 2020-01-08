@@ -36,44 +36,8 @@ WHERE
 `createdUserKey` = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
 ```
 
-So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it replace
+So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it to replace
 hundreds of potential endpoints.
-
-### Create
-
-If you want to make a **CREATE** just add some `data`:
-
-```js
-{
-  database: 'bms_campaigns',
-  table: 'bookings',
-  data: {
-    bookingName: 'Cool Booking!',
-    bookingsKey: '12345',
-    tmpKey: '123'
-  }
-},
-```
-
-### Update
-
-Then for an **UPDATE** just add a `where`:
-
-```js
-{
-  database: 'bms_campaigns',
-  table: 'bookings',
-  data: {
-    bookingName: 'Mega Cool Booking!',
-  },
-  where: [
-    {
-      name: 'bookingsKey',
-      is: '12345'
-    }
-  ]
-},
-```
 
 ### Where
 
@@ -164,7 +128,7 @@ const connection = require('../libs/connection');
 const schema = require('../schema');
 
 // Import jsonQL...
-const JsonQL = require('../libs/jsonQL');
+const JsonQL = require('@seanwarman/jsonql');
 
 
 async function example() {
@@ -172,7 +136,7 @@ async function example() {
   // Connect to mysql...
   const con = await mysql.createConnection(connection);
 
-  // Make a new instance of jsonQL using your chosen schema.
+  // Make a new JsonQL instance using your chosen schema.
   const jsonQL = new JsonQL(schema);
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
@@ -210,6 +174,47 @@ async function example() {
   await con.end()
 
 }
+```
+
+### Create
+
+If you want to make a **CREATE** just add some `data`:
+
+```js
+let data = {
+  bookingName: 'Cool Booking!',
+  bookingsKey: '12345',
+  tmpKey: '123'
+}
+
+jsonQL.createQL({
+  database: 'bms_campaigns',
+  table: 'bookings',
+}, data);
+```
+
+### Update
+
+Then for an **UPDATE** just add a `where`:
+
+```js
+let data = {
+  bookingName: 'Really Cool Booking!'
+}
+
+jsonQL.updateQL({
+  database: 'bms_campaigns',
+  table: 'bookings',
+  data: {
+    bookingName: 'Mega Cool Booking!',
+  },
+  where: [
+    {
+      name: 'bookingsKey',
+      is: '12345'
+    }
+  ]
+}, data);
 ```
 
 ## Schema
