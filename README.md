@@ -5,7 +5,7 @@ It allows you to build your database query in the frontend like...
 
 ```js
 {
-  database: 'bms_campaigns',
+  db: 'bms_campaigns',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
@@ -45,7 +45,7 @@ You'll notice `where` is an array. That's so we can add extra ones for multiple 
 
 ```js
 {
-    database: 'bms_campaigns',
+    db: 'bms_campaigns',
     table: 'bookings',
     columns: [
       {name: 'bookingName'},
@@ -72,7 +72,7 @@ JOINs can be added as part of the `columns` array...
 
 ```js
 {
-  database: 'bms_booking',
+  db: 'bms_booking',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
@@ -80,7 +80,7 @@ JOINs can be added as part of the `columns` array...
     {name: 'bookingsKey'},
     {name: 'assignedUserKey'},
     {join: {
-      database: 'Biggly',
+      db: 'Biggly',
       table: 'partners',
       columns: [
         {name: 'partnerName'}
@@ -141,7 +141,7 @@ async function example() {
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
   let queryObj = jsonQL.selectQL({
-    database: 'bms_campaigns',
+    db: 'bms_campaigns',
     table: 'bookings',
     columns: [
       {name: 'bookingName'},
@@ -188,7 +188,7 @@ let data = {
 }
 
 jsonQL.createQL({
-  database: 'bms_campaigns',
+  db: 'bms_campaigns',
   table: 'bookings',
 }, data);
 ```
@@ -203,7 +203,7 @@ let data = {
 }
 
 jsonQL.updateQL({
-  database: 'bms_campaigns',
+  db: 'bms_campaigns',
   table: 'bookings',
   data: {
     bookingName: 'Mega Cool Booking!',

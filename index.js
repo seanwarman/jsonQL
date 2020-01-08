@@ -38,14 +38,14 @@ module.exports = class jsonQL {
   
   init(jsonQuery, data = null) {
     this.jsonQuery = jsonQuery;
-    this.primaryDBName = jsonQuery.database;
+    this.primaryDBName = jsonQuery.db;
     this.primaryTableName = jsonQuery.table;
     
     this.data = data;
 
     this.primaryDBSchema = this.schema[this.primaryDBName]
     if (!this.primaryDBSchema) {
-      this.fatalError = {status: 'error', message: 'This primary database name was not found in the schema: ' + this.primaryDBName};
+      this.fatalError = {status: 'error', message: 'This primary db name was not found in the schema: ' + this.primaryDBName};
       return;
     }
 
@@ -61,7 +61,7 @@ module.exports = class jsonQL {
   createQuery(jsonQuery = this.jsonQuery, data = this.data) {
 
     this.insert(
-      jsonQuery.database, 
+      jsonQuery.db, 
       jsonQuery.table, 
       data
     );
@@ -81,20 +81,20 @@ module.exports = class jsonQL {
   selectQuery(jsonQuery = this.jsonQuery) {
 
     this.handleJoins(
-      jsonQuery.database, 
+      jsonQuery.db, 
       jsonQuery.table, 
       jsonQuery.columns
     );
 
     this.select(
-      jsonQuery.database, 
+      jsonQuery.db, 
       jsonQuery.table, 
       jsonQuery
     );
     
     if(jsonQuery.where) {
       this.where(
-        jsonQuery.database, 
+        jsonQuery.db, 
         jsonQuery.table, 
         jsonQuery.where
       );
@@ -114,13 +114,13 @@ module.exports = class jsonQL {
 
   updateQuery(jsonQuery = this.jsonQuery, data = this.data) {
     this.update(
-      jsonQuery.database, 
+      jsonQuery.db, 
       jsonQuery.table, 
       data
     )
       
     this.where(
-      jsonQuery.database,
+      jsonQuery.db,
       jsonQuery.table,
       jsonQuery.where
     )
@@ -141,7 +141,7 @@ module.exports = class jsonQL {
     this.deleteString = `DELETE ${this.fromString}`
       
     this.where(
-      jsonQuery.database,
+      jsonQuery.db,
       jsonQuery.table,
       jsonQuery.where
     )
@@ -164,9 +164,9 @@ module.exports = class jsonQL {
     this.queryString = `${this.updateString} ${this.whereString}`;
   }
 
-  update(database, table, data) {
-    this.updateString = `UPDATE ${database}.${table} SET ${Object.keys(data).filter(col => {
-      if(!this.schemaValid(database, table, col)) return false;
+  update(db, table, data) {
+    this.updateString = `UPDATE ${db}.${table} SET ${Object.keys(data).filter(col => {
+      if(!this.schemaValid(db, table, col)) return false;
       if(data[col] === null) return false;
       if(data[col] === undefined) return false;
       return true
@@ -212,11 +212,11 @@ module.exports = class jsonQL {
       this.queryString += ` ORDER BY ${orderBy.name}${ascDesc}`;
     }
   }
-  insert(database, table, data) {
+  insert(db, table, data) {
 
     let cols = Object.keys(data).filter(col => {
-      if(!this.schemaValid(database, table, col)) {
-        this.errors.push(`${col} is an invalid column for ${database}.${table}`);
+      if(!this.schemaValid(db, table, col)) {
+        this.errors.push(`${col} is an invalid column for ${db}.${table}`);
         return false;
       }
       return true;
@@ -227,16 +227,16 @@ module.exports = class jsonQL {
       if(typeof val === 'number') return val;
     }).join();
 
-    this.insertString = `INSERT INTO ${database}.${table}
+    this.insertString = `INSERT INTO ${db}.${table}
       (${cols.join()})
       VALUES
       (${values})
     `;
 
   }
-  where(database, table, where) {
+  where(db, table, where) {
     this.whereString = where.reduce((str, whereObj) => {
-      if(whereObj.name && !this.schemaValid(database, table, whereObj.name)) {
+      if(whereObj.name && !this.schemaValid(db, table, whereObj.name)) {
         return str;
       }
       if(str.length === 0) {
@@ -247,30 +247,30 @@ module.exports = class jsonQL {
 
       if(whereObj.or) {
         let or = whereObj.or.filter(orObj => {
-          return this.schemaValid(database, table, orObj.name)
+          return this.schemaValid(db, table, orObj.name)
         })
         .map(orObj => {
-          return `${database}.${table}.${orObj.name} ${orObj.is ? `= '${orObj.is}'` : `!= '${orObj.isnot}'`}` 
+          return `${db}.${table}.${orObj.name} ${orObj.is ? `= '${orObj.is}'` : `!= '${orObj.isnot}'`}` 
         })
         .join(' OR ');
         if(or.length > 0) return str + `(${or})`;
         return str;
       } else {
-        return str + `${database}.${table}.${whereObj.name} ${whereObj.is ? `= '${whereObj.is}'` : `!= '${whereObj.isnot}'`}`;
+        return str + `${db}.${table}.${whereObj.name} ${whereObj.is ? `= '${whereObj.is}'` : `!= '${whereObj.isnot}'`}`;
       }
       
     },'')
     console.log('this.whereString :', this.whereString);
   }
   join(joinObj) {
-    const database = joinObj.database;
+    const db = joinObj.db;
     const table = joinObj.table;
-    if(!this.schema[database]) {
-      this.errors.push(database + ' database not found in schema');
+    if(!this.schema[db]) {
+      this.errors.push(db + ' db not found in schema');
       return;
     }
-    if(!this.schema[database][table]) {
-      this.errors.push(database + '.' + table + ' not found in schema');
+    if(!this.schema[db][table]) {
+      this.errors.push(db + '.' + table + ' not found in schema');
       return;
     }
     if(!joinObj.where) {
@@ -287,7 +287,7 @@ module.exports = class jsonQL {
     }
 
     const primarySelection = `${this.primaryDBName}.${this.primaryTableName}`;
-    let selection = `${database}.${table}`;
+    let selection = `${db}.${table}`;
     const where = joinObj.where;
 
     const aliasTableName = this.aliasReplicaTableNames(table);
@@ -298,16 +298,16 @@ module.exports = class jsonQL {
       this.joinString += ` LEFT JOIN ${selection} ON ${primarySelection}.${where.parent} = ${selection}.${where.is}`;
     }
   }
-  select(database, table, jsonQueryObj, alias = table) {
+  select(db, table, jsonQueryObj, alias = table) {
 
     const schema = this.schema;
     
-    if(!schema[database]) {
-      this.errors.push(database + ' database not found in schema');
+    if(!schema[db]) {
+      this.errors.push(db + ' db not found in schema');
       return;
     }
-    if(!schema[database][table]) {
-      this.errors.push(database + '.' + table + ' not found in schema');
+    if(!schema[db][table]) {
+      this.errors.push(db + '.' + table + ' not found in schema');
       return;
     }
 
@@ -315,14 +315,19 @@ module.exports = class jsonQL {
     if(table !== alias) {
       selection = alias;
     } else {
-      selection = `${database}.${table}`;
+      selection = `${db}.${table}`;
     }
-
-    const colsWithoutJoin = jsonQueryObj.columns.filter(col => !col.join);
+    
+    const colsWithoutJoin = (jsonQueryObj.columns || []).filter(col => !col.join);
+    
+    if(colsWithoutJoin.length === 0) {
+      this.selectString += `${selection}.*`;
+      return;
+    }
     
     this.selectString += colsWithoutJoin.reduce((str,col) => {
       let as = '';
-      if(!schema[database][table][col.name]) {
+      if(!schema[db][table][col.name]) {
         return str;
       }
       if(col.as && !this.invalid(col.as)) {
@@ -350,29 +355,35 @@ module.exports = class jsonQL {
     }
   }
 
-  handleJoins(database, table, columns) {
+  handleJoins(db, table, columns) {
 
-    const colsWithJoin = columns.filter(col => col.join);
+    const colsWithJoin = (columns || []).filter(col => col.join);
+    if(colsWithJoin.length === 0) return;
     colsWithJoin.forEach(col => {
       this.join(col.join)
     });
     colsWithJoin.forEach((col,i) => {
-      this.select(col.join.database, col.join.table, col.join, this.joinTables[i]);
+      this.select(
+        col.join.db, 
+        col.join.table, 
+        col.join, 
+        this.joinTables[i]
+        );
     });
 
   }
 
-  schemaValid(database, table, column) {
+  schemaValid(db, table, column) {
 
-    if(!this.schema[database]) {
-      this.errors.push(database + ' database not found in schema');
+    if(!this.schema[db]) {
+      this.errors.push(db + ' db not found in schema');
       return false;
     }
-    if(table && !this.schema[database][table]) {
-      this.errors.push(database + '.' + table + ' not found in schema');
+    if(table && !this.schema[db][table]) {
+      this.errors.push(db + '.' + table + ' not found in schema');
       return false;
     }
-    if(column && !this.schema[database][table][column]) {
+    if(column && !this.schema[db][table][column]) {
       this.errors.push(column + ' not found in schema');
       return false;
     }
