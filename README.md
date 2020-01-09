@@ -251,3 +251,35 @@ The structure of your schema object should look like:
 
 Any columns not included in the schema will be automatically omitted from your queries. Any
 databases or tables not included will break **jsonQL** if you then try to query them.
+
+## Json Extract
+To do a JSON_EXTRACT function on a json column you can search for the object with your value
+using `jsonExtract` in the `columns` array:
+
+```js
+{
+  db: 'bms_booking',
+  table: 'bookings',
+  columns: [
+    {
+      name: 'jsonForm', 
+      as: 'bookingMonth',
+      jsonExtract: {search: 'Booking Month', target: 'value'}
+    }
+  ]
+}
+```
+
+This finds an object in an array of objects by searching for the string 'Booking Month' then 
+returns whatever is assigned to the key called `value`.
+
+So if a `jsonForm` column in the db looks like:
+
+```js
+[
+  {label: 'Booking Month', type: 'input', value: 'December'},
+  {label: 'Keyword',       type: 'input', value: 'Christmas'}
+]
+```
+The 'Booking Month' `search` will return the first object in this array and
+the `target` of `value` will return 'December'.
