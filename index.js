@@ -321,7 +321,11 @@ module.exports = class jsonQL {
     const colsWithoutJoin = (jsonQueryObj.columns || []).filter(col => !col.join);
     
     if(colsWithoutJoin.length === 0) {
-      this.selectString += `${selection}.*`;
+      if(this.selectString.length === 0) {
+        this.selectString += `${selection}.*`;
+      } else {
+        this.selectString += `, ${selection}.*`;
+      }
       return;
     }
     
