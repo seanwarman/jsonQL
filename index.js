@@ -86,6 +86,12 @@ module.exports = class jsonQL {
       jsonQuery.columns
     );
 
+    this.handleExtract(
+      jsonQuery.db,
+      jsonQuery.table,
+      jsonQuery.columns
+    )
+
     this.select(
       jsonQuery.db, 
       jsonQuery.table, 
@@ -318,9 +324,9 @@ module.exports = class jsonQL {
       selection = `${db}.${table}`;
     }
     
-    const colsWithoutJoin = (jsonQueryObj.columns || []).filter(col => !col.join);
+    const plainCols = (jsonQueryObj.columns || []).filter(col => !col.join && !col.jsonExtract);
     
-    if(colsWithoutJoin.length === 0) {
+    if(plainCols.length === 0) {
       if(this.selectString.length === 0) {
         this.selectString += `${selection}.*`;
       } else {
@@ -329,24 +335,13 @@ module.exports = class jsonQL {
       return;
     }
     
-    this.selectString += colsWithoutJoin.reduce((str,col) => {
-      let as = '';
-      if(!schema[db][table][col.name]) {
-        return str;
+    plainCols.forEach((col) => {
+      if(!this.schema[db][table][col.name]) {
+        return;
       }
-      if(col.as && !this.invalid(col.as)) {
-        as = ` AS ${col.as}`
-      }
-      if(this.selectString.length === 0 && str.length === 0) {
-        str += `${selection}.${col.name}${as}`;
-      } else {
-        str += `, ${selection}.${col.name}${as}`
-      }
-      return str;
-    }, '')
-    
+      this.selectOne(`${selection}.${col.name}`, col)
+    });
   }
-  
   aliasReplicaTableNames(table) {
     let aliasTableName;
     const numOfReplicas = this.joinTables.filter(tableName => tableName === table).length;
@@ -358,7 +353,42 @@ module.exports = class jsonQL {
       return table;
     }
   }
+  handleExtract(db, table, columns, where) {
+    const colsWithExtract = (columns || []).filter(col => col.jsonExtract);
+    console.log('colsWithExtract :', colsWithExtract);
+    if(colsWithExtract.length === 0) return;
 
+    colsWithExtract.forEach((col,i) => {
+      if(this.invalid(col.as)) return;
+      if(!this.schema[db][table][col.name]) {
+        this.errors.push('Column name \'' + col.name + '\' not found in schema');
+        return;
+      }
+      if(this.schema[db][table][col.name].type !== 'json') {
+        this.errors.push(col.name + ' is not a \'json\' type field')
+        return;
+      }
+      const selection = `JSON_EXTRACT(
+        JSON_EXTRACT(
+          ${db}.${table}.${col.name}, concat('$[', substr(JSON_SEARCH(${db}.${table}.${col.name}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')
+        ), '$.${col.jsonExtract.target}'
+      )`;
+
+      this.selectOne(selection, col);
+      
+    })
+  }
+  selectOne(selection, col) {
+    let as = '';
+    if(col.as && !this.invalid(col.as)) {
+      as = ` AS ${col.as}`
+    }
+    if(this.selectString.length === 0) {
+      this.selectString = `${selection}${as}`;
+    } else {
+      this.selectString += `, ${selection}${as}`
+    }
+  }
   handleJoins(db, table, columns) {
 
     const colsWithJoin = (columns || []).filter(col => col.join);
