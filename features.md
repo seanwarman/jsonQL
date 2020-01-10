@@ -1,26 +1,5 @@
 # Features TODO
 
-We need a `concat` option in the `columns` objects.
-Possibly it would be very useful to have a `format` option for the returned value.
-
-```js
-{
-  format: {
-    fn: 'REPLACE',
-    args: ['bookingName', '\'"\'', '\'\'']
-  },
-  as: 'bookingNameNoQuotes'
-},
-{
-  format: {
-    fn: 'CONCAT',
-    args: ['firstName', '\' \'', 'lastName']
-  },
-  as: 'fullName'
-}
-```
-**Note**: We have to put in the backslash quotes here (\') to denote a string value in the SQL.
-
 A `count` option.
 
 ```js
@@ -32,6 +11,12 @@ A `count` option.
   },
   as: 'uploadsCount'
 }
+```
+
+Make the `join` `where` into an array like the top level `where`.
+
+```js
+where: [{name: 'bookingsKey', is: '123'}]
 ```
 
 The `jsonExtract` needs to accept and `index` with and without a

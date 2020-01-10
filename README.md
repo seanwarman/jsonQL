@@ -283,3 +283,39 @@ So if a `jsonForm` column in the db looks like:
 ```
 The 'Booking Month' `search` will return the first object in this array and
 the `target` of `value` will return 'December'.
+
+## Format
+
+To use slq functions you can use the format object.
+
+```js
+columns: [
+  {
+    format: {
+      fn: 'REPLACE',
+      args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}]
+    },
+    as: 'bookingNameFormatted'
+  },
+],
+```
+
+This will also work with REPLACE and many other slq functions.
+You can also put `format` into a `join`.
+
+```js
+{join: {
+  db: 'Biggly',
+  table: 'users',
+  columns: [
+    {
+      format: {
+        fn: 'CONCAT',
+        args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}]
+      },
+      as: 'fullName'
+    }
+  ],
+  where: {name: 'createdUserKey', is: 'userKey'}
+}},
+```
