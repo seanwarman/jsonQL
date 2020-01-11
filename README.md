@@ -87,7 +87,7 @@ JOINs can be added as part of the `columns` array...
       columns: [
         {name: 'partnerName'}
       ],
-      where: {parent: 'createdPartnerKey', is: 'partnerKey'},
+      where: {name: 'createdPartnerKey', is: 'partnerKey'},
     }},
   ],
 }

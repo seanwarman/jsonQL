@@ -1,6 +1,6 @@
 {
   "name": "@seanwarman/jsonql",
-  "version": "2.1.0",
+  "version": "2.2.1",
   "description": "A small framework for building MYSQL queries with json objects.",
   "main": "index.js",
   "scripts": {

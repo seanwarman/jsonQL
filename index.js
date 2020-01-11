@@ -356,7 +356,7 @@ module.exports = class jsonQL {
       this.select(
         col.join.db, 
         col.join.table, 
-        col.join, 
+        col.join.columns, 
         this.joinTables[i]
       );
     });
