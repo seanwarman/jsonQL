@@ -1,7 +1,7 @@
 class main {
 
   // ## JoinObject                           ## WhereObject
-                                        
+
   // const JoinObject = {                    const WhereObject = {
   //   db: String,                             name: String,
   //   table: String,                          is: String,
@@ -9,9 +9,9 @@ class main {
   //   columns: [ColumnObject]                 or: [WhereObject]
   // }                                       }
 
-  
+
   // ## ColumnObject                         
-                                          
+
   // const ColumnObject = {                  
   //   name: String,                         
   //   fn: String,
@@ -26,11 +26,12 @@ class main {
 
     this.Q = {
       select: [],
-      from: {},
+      from: '',
       join: [],
       where: [],
     }
   }
+
   parseCols(db, table, columns) {
     const nameCols = columns.filter(col => col.name || col.number || col.string);
     const joinCols = columns.filter(col => col.join);
@@ -45,9 +46,23 @@ class main {
     }
 
     if(fnCols.length > 0) {
-      this.selectFormatCols(db, table, fnCols);
+      this.selectFnCols(db, table, fnCols);
     }
     
+  }
+
+  parseWhere(db, table, where) {
+    where.forEach(wh => {
+      let whereStr = `(${this.whString(db, table, wh)})`;
+      this.Q.where.push(whereStr);
+    });
+  }
+
+  whString(db, table, wh) {
+    if(!wh.or) {
+      return `${db}.${table}.${wh.name} = '${wh.is}'`;
+    }
+    return `${db}.${table}.${wh.name} = '${wh.is}' OR ${this.whString(db, table, wh.or)}`;
   }
 
   selectNameCols(db, table, nameCols) {
@@ -73,14 +88,9 @@ class main {
   selectJoinCols(db, table, joinCols) {
     joinCols.forEach(col => {
 
-      this.Q.join.push({
-        db,
-        table,
-        name: col.join.where[0].name,
-        onDb: col.join.db,
-        onTable: col.join.table,
-        onName: col.join.where[0].is,
-      });
+      let joinStr = `LEFT JOIN ${col.join.db}.${col.join.table} ON ${db}.${table}.${col.join.where[0].name} = ${col.join.db}.${col.join.table}.${col.join.where[0].is}`;
+
+      this.Q.join.push(joinStr);
 
       this.parseCols(col.join.db, col.join.table, col.join.columns);
     });
@@ -103,7 +113,7 @@ class main {
     }).join()})`
   }
 
-  selectFormatCols(db, table, fnCols) {
+  selectFnCols(db, table, fnCols) {
 
     fnCols.forEach(col => {
       let selectStr = this.fnString(db, table, col.fn, col.args)
@@ -116,7 +126,9 @@ class main {
 
   selectQL({db, table, columns, where}) {
     // TODO: Check keys and values
+    this.Q.from = `${db}.${table}`;
     this.parseCols(db, table, columns);
+    this.parseWhere(db, table, where);
     
     console.log('this.Q :', this.Q);
     // const selectQuery = `
@@ -159,6 +171,8 @@ const ql = new main();
                                           
   // const ColumnObject = {                  
   //   name: String,                         
+  //   string: String,                         
+  //   number: String/Number,                         
   //   fn: String,
   //   args: [ColumnObject],
   //   as: String,                           
@@ -207,6 +221,13 @@ ql.selectQL({
     }},
   ],
   where: [
+    {
+      name: 'assignedUserKey',
+      is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
+      or: {
+        name: 'thingy', is: 'stuff'
+      }
+    },
     {
       name: 'createdUserKey',
       is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',

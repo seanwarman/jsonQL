@@ -268,6 +268,7 @@ bms_booking.bookings
 LEFT JOIN Biggly.partners ON bms_booking.bookings.partnerKey = Biggly.partners.createdPartnerKey
 ```
 Will look like:
+
 ```js
 JsonQL = {
   select: [
@@ -282,6 +283,43 @@ JsonQL = {
 ```
 
 
+`WhereObjects` work like this...
 
+```js
+const where = [
+  {name: String, is: String, or: {
+    name: String, is: String, or: {
+      name: String, is: String
+    }
+  },
+  // ...AND
+  { name: String, is: String },
+  // ...AND
+  { name: String, is: String }
+]
+```
 
+So objects in the top level array mean AND and objects nested in `or` mean OR.
 
+```js
+const where = [
+  WhereObject,
+  // AND
+  WhereObject,
+  // AND
+  WhereObject
+  // etc
+]
+
+const WhereObject = {
+  // OR
+  or: {
+    // OR
+    or: {
+      // OR
+      or: {
+      }
+    }
+  }
+}
+```
