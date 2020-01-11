@@ -1,35 +1,15 @@
+const mysql = require('mysql2/promise');
+const connection = require('../../scratchpad-bms-api/config/dbConfig');
 class main {
 
-  // ## JoinObject                           ## WhereObject
-
-  // const JoinObject = {                    const WhereObject = {
-  //   db: String,                             name: String,
-  //   table: String,                          is: String,
-  //   where: [WhereObject],                   isnot: String,
-  //   columns: [ColumnObject]                 or: [WhereObject]
-  // }                                       }
-
-
-  // ## ColumnObject                         
-
-  // const ColumnObject = {                  
-  //   name: String,                         
-  //   fn: String,
-  //   args: [ColumnObject],
-  //   as: String,                           
-  //   join: JoinObject
-  // }
-
   constructor(schema) {
-
     this.schema = schema;
+    this.joinTables = [];
 
-    this.Q = {
-      select: [],
-      from: '',
-      join: [],
-      where: [],
-    }
+    this.select = [];
+    this.from = '';
+    this.join = [];
+    this.where = [];
   }
 
   parseCols(db, table, columns) {
@@ -53,16 +33,16 @@ class main {
 
   parseWhere(db, table, where) {
     where.forEach(wh => {
-      let whereStr = `(${this.whString(db, table, wh)})`;
-      this.Q.where.push(whereStr);
+      let whereStr = `${this.whString(db, table, wh)}`;
+      this.where.push(whereStr);
     });
   }
 
   whString(db, table, wh) {
     if(!wh.or) {
-      return `${db}.${table}.${wh.name} = '${wh.is}'`;
+      return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`}`;
     }
-    return `${db}.${table}.${wh.name} = '${wh.is}' OR ${this.whString(db, table, wh.or)}`;
+    return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`} OR ${this.whString(db, table, wh.or)}`;
   }
 
   selectNameCols(db, table, nameCols) {
@@ -81,18 +61,42 @@ class main {
         selectStr += ` AS ${col.as}`;
       }
 
-      this.Q.select.push(selectStr);
+      this.select.push(selectStr);
     })
   }
-
+  aliasReplicaTableNames(table) {
+    let aliasTableName;
+    const numOfReplicas = this.joinTables.filter(tableName => tableName === table).length;
+    if(numOfReplicas > 0) {
+      aliasTableName = this.aliasReplicaTableNames(table + Math.floor(Math.random() * Math.floor(1000)))
+      return aliasTableName;
+    } else {
+      this.joinTables.push(table);
+      return table;
+    }
+  }
   selectJoinCols(db, table, joinCols) {
     joinCols.forEach(col => {
 
-      let joinStr = `LEFT JOIN ${col.join.db}.${col.join.table} ON ${db}.${table}.${col.join.where[0].name} = ${col.join.db}.${col.join.table}.${col.join.where[0].is}`;
+      let joinStr = '';
 
-      this.Q.join.push(joinStr);
+      let aliasTableName = this.aliasReplicaTableNames(col.join.table);
+      let aliasString = '';
 
-      this.parseCols(col.join.db, col.join.table, col.join.columns);
+      if(col.join.table !== aliasTableName) {
+        aliasString = ` AS ${aliasTableName}`;
+      }
+
+      if(col.join.where[0].isnot) {
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${db}.${table}.${col.join.where[0].name} != ${col.join.db}.${aliasTableName}.${col.join.where[0].isnot}`;
+      }
+      if(col.join.where[0].is) {
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${db}.${table}.${col.join.where[0].name} = ${col.join.db}.${aliasTableName}.${col.join.where[0].is}`;
+      }
+
+      this.join.push(joinStr);
+
+      this.parseCols(col.join.db, aliasTableName, col.join.columns);
     });
   }
 
@@ -120,33 +124,78 @@ class main {
       if(col.as) {
         selectStr += ` AS ${col.as}`;
       }
-      this.Q.select.push(selectStr)
+      this.select.push(selectStr)
     });
   }
 
-  selectQL({db, table, columns, where}) {
-    // TODO: Check keys and values
-    this.Q.from = `${db}.${table}`;
-    this.parseCols(db, table, columns);
-    this.parseWhere(db, table, where);
+  buildSelect() {
+
+    let select = '*';
+    if(this.select.length > 0) {
+      select = `SELECT ${this.select.map(selStr => selStr).join()}`;
+    }
+
+    let from = `FROM ${this.from}`;
+
+    let join = '';
+    if(this.join.length > 0) {
+      join = `${this.join.map(jStr => `LEFT JOIN ${jStr}`).join(' ')}`
+    }
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`
+    }
+
+    let limit = '';
+    if(this.limit.length > 0) {
+      limit = `LIMIT ${this.limit.map(num => num).join()}`
+    }
     
-    console.log('this.Q :', this.Q);
-    // const selectQuery = `
-    //   SELECT
-    //   ${this.select.map(s => 
-    //     `${s.db}.${s.table}.${s.name}${s.as ? `AS ${s.as}` : ''}`
-    //   ).join()}
+    return `
+      ${select}
+      ${from}
+      ${join}
+      ${where}
+      ${limit}
+    `
+  }
+  
+  async selectQL({db, table, columns, where, limit}) {
+    // TODO: Check keys and values
+    
+    this.from = `${db}.${table}`;
 
-    //   FROM
-    //   ${this.from.db}.${this.from.table}
+    if(columns && (columns || []).length > 0) {
+      this.parseCols(db, table, columns);
+    }
 
-    //   WHERE
-    //   ${this.where.map((w,i) => 
-    //     `(${db}.${table}.${w.name} = '${w.is}')`
-    //   ).join('AND')}
-    // `
+    if(where && (where || []).length > 0) {
+      this.parseWhere(db, table, where);
+    }
 
-    // console.log('selectQuery :', selectQuery);
+    if(limit) {
+      this.limit = limit;
+    }
+    
+    // console.log('this :', this);
+
+    const selectQuery = this.buildSelect();
+
+    const con = await mysql.createConnection(connection.biggly);
+
+    let result;
+
+    try {
+      result = await con.query(selectQuery);
+    } catch (error) {
+      console.log('error :', error);
+      con.close();
+    }
+
+    con.close();
+
+    console.log('result :', result[0]);
   }
 
   
@@ -163,7 +212,7 @@ const ql = new main();
   //   db: String,                             name: String,
   //   table: String,                          is: String,
   //   where: [WhereObject],                   isnot: String,
-  //   columns: [ColumnObject]                 or: [WhereObject]
+  //   columns: [ColumnObject]                 or: WhereObject
   // }                                       }
 
   
@@ -180,57 +229,49 @@ const ql = new main();
   // }
 
 ql.selectQL({
-  db: 'bms_campaigns',
+  db: 'bms_booking',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
     {name: 'bookingsKey'},
-    {name: 'assignedUserKey'},
-    {
-      fn: 'JSON_EXTRACT',
-      args: [
-        { fn: 'JSON_EXTRACT', args: [
-          { name: 'jsonForm' },
-          { fn: 'CONCAT' , args: [
-            {string: '$['},
-            {fn: 'SUBSTRING', args: [
-              {fn: 'JSON_SEARCH', args: [
-                {name: 'jsonForm'},
-                {string: 'all'},
-                {string: 'Booking Month'},
-              ]},
-              {number: 4},
-              {number: 1},
-            ]},
-            {string: ']'}
-          ]}
-        ]},
-        {string: '$.value'},
-      ],
-      as: 'bookingMonth'
-    },
     {join: {
-      db: 'bms_booking',
-      table: 'bookingDivisions',
+      db: 'Biggly',
+      table: 'users',
       columns: [
         {
-          name: 'bookingName'
-        },
+          fn: 'CONCAT',
+          args: [
+            {name: 'firstName'},
+            {string: ' '},
+            {name: 'lastName'},
+          ],
+          as: 'createdName'
+        }
       ],
-      where: [{name: 'bookingDivKey', is: 'bookingDivKey'}]
+      where: [{name: 'createdUserKey', is: 'userKey'}]
     }},
+    {join: {
+      db: 'Biggly',
+      table: 'users',
+      columns: [
+        {
+          fn: 'CONCAT',
+          args: [
+            {name: 'firstName'},
+            {string: ' '},
+            {name: 'lastName'},
+          ],
+          as: 'assignedName'
+        }
+      ],
+      where: [{name: 'assignedUserKey', is: 'userKey'}]
+    }}
   ],
   where: [
     {
-      name: 'assignedUserKey',
-      is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
-      or: {
-        name: 'thingy', is: 'stuff'
-      }
-    },
-    {
-      name: 'createdUserKey',
-      is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
-    },
-  ]
+      name: 'bookingsKey',
+      is: '0021ecb0-20ee-11ea-8236-771da2034d25',
+    }
+  ],
+  limit: [0,5]
 })
