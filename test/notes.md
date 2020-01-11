@@ -271,8 +271,8 @@ Will look like:
 ```js
 JsonQL = {
   select: [
-    {db: String, table: String, name: String as: String},
-    {db: String, table: String, name: String as: String}
+    {db: String, table: String, name: String as: String [, fn: String]},
+    {db: String, table: String, name: String as: String [, fn: String]}
   ],
   from: {db: String, table: String},
   join: [

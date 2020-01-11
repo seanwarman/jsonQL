@@ -10,22 +10,19 @@ class main {
   // }                                       }
 
   
-  // ## ColumnObject                         ## FormatObject
+  // ## ColumnObject                         
                                           
-  // const ColumnObject = {                  const FormatObject = {
-  //   name: String,                           fn: String,
-  //   string: String,                         args: [ColumnObject]
-  //   as: String,                           }
-  //   format: FormatObject,                
+  // const ColumnObject = {                  
+  //   name: String,                         
+  //   fn: String,
+  //   args: [ColumnObject],
+  //   as: String,                           
   //   join: JoinObject
   // }
+
   constructor(schema) {
 
     this.schema = schema;
-
-    this.nameCols = [];
-    this.formatCols = [];
-    this.joinCols = [];
 
     this.Q = {
       select: [],
@@ -35,27 +32,36 @@ class main {
     }
   }
   parseCols(db, table, columns) {
-    const nameCols = columns.filter(col => col.name)
-    const joinCols = columns.filter(col => col.join)
-    const formatCols = columns.filter(col => col.format)
+    const nameCols = columns.filter(col => col.name || col.number || col.string);
+    const joinCols = columns.filter(col => col.join);
+    const fnCols = columns.filter(col => col.fn);
 
     if(nameCols.length > 0) {
-      this.selectNameCols(db, table, nameCols)
+      this.selectNameCols(db, table, nameCols);
     }
     
     if(joinCols.length > 0) {
-      this.selectJoinCols(joinCols);
+      this.selectJoinCols(db, table, joinCols);
     }
 
-    if(formatCols.length > 0) {
-
+    if(fnCols.length > 0) {
+      this.selectFormatCols(db, table, fnCols);
     }
-
     
   }
+
   selectNameCols(db, table, nameCols) {
     nameCols.forEach(col => {
-      let selectStr = `${db}.${table}.${col.name}`;
+      let selectStr = '';
+      if(col.name) {
+        selectStr = `${db}.${table}.${col.name}`;
+      }
+      if(col.number) {
+        selectStr = `${col.number}`;
+      }
+      if(col.string) {
+        selectStr = `'${col.string}'`;
+      }
       if(col.as) {
         selectStr += ` AS ${col.as}`;
       }
@@ -63,17 +69,56 @@ class main {
       this.Q.select.push(selectStr);
     })
   }
-  selectJoinCols(joinCols) {
-    joinCols.forEach(col => {
-      this.parseCols(col.db, col.table, col.columns);
-    })
-  }
-  selectQL({db, table, columns, where}) {
 
+  selectJoinCols(db, table, joinCols) {
+    joinCols.forEach(col => {
+
+      this.Q.join.push({
+        db,
+        table,
+        name: col.join.where[0].name,
+        onDb: col.join.db,
+        onTable: col.join.table,
+        onName: col.join.where[0].is,
+      });
+
+      this.parseCols(col.join.db, col.join.table, col.join.columns);
+    });
+  }
+
+  fnString(db, table, fn, args) {
+    return `${fn}(${args.map(arg => {
+      if(arg.name) {
+        return `${db}.${table}.${arg.name}`; 
+      }
+      if(arg.number) {
+        return `${arg.number}`; 
+      }
+      if(arg.string) {
+        return `'${arg.string}'`;
+      }
+      if(arg.fn) {
+        return this.fnString(db, table, arg.fn, arg.args);
+      }
+    }).join()})`
+  }
+
+  selectFormatCols(db, table, fnCols) {
+
+    fnCols.forEach(col => {
+      let selectStr = this.fnString(db, table, col.fn, col.args)
+      if(col.as) {
+        selectStr += ` AS ${col.as}`;
+      }
+      this.Q.select.push(selectStr)
+    });
+  }
+
+  selectQL({db, table, columns, where}) {
     // TODO: Check keys and values
     this.parseCols(db, table, columns);
     
-    console.log('this.Q.select :', this.Q.select);
+    console.log('this.Q :', this.Q);
     // const selectQuery = `
     //   SELECT
     //   ${this.select.map(s => 
@@ -100,6 +145,26 @@ class main {
 
 const ql = new main();
 
+  // ## JoinObject                           ## WhereObject
+                                        
+  // const JoinObject = {                    const WhereObject = {
+  //   db: String,                             name: String,
+  //   table: String,                          is: String,
+  //   where: [WhereObject],                   isnot: String,
+  //   columns: [ColumnObject]                 or: [WhereObject]
+  // }                                       }
+
+  
+  // ## ColumnObject                         
+                                          
+  // const ColumnObject = {                  
+  //   name: String,                         
+  //   fn: String,
+  //   args: [ColumnObject],
+  //   as: String,                           
+  //   join: JoinObject
+  // }
+
 ql.selectQL({
   db: 'bms_campaigns',
   table: 'bookings',
@@ -107,14 +172,39 @@ ql.selectQL({
     {name: 'bookingName'},
     {name: 'bookingsKey'},
     {name: 'assignedUserKey'},
+    {
+      fn: 'JSON_EXTRACT',
+      args: [
+        { fn: 'JSON_EXTRACT', args: [
+          { name: 'jsonForm' },
+          { fn: 'CONCAT' , args: [
+            {string: '$['},
+            {fn: 'SUBSTRING', args: [
+              {fn: 'JSON_SEARCH', args: [
+                {name: 'jsonForm'},
+                {string: 'all'},
+                {string: 'Booking Month'},
+              ]},
+              {number: 4},
+              {number: 1},
+            ]},
+            {string: ']'}
+          ]}
+        ]},
+        {string: '$.value'},
+      ],
+      as: 'bookingMonth'
+    },
     {join: {
       db: 'bms_booking',
       table: 'bookingDivisions',
       columns: [
-        {name: 'bookingDivName'}
+        {
+          name: 'bookingName'
+        },
       ],
       where: [{name: 'bookingDivKey', is: 'bookingDivKey'}]
-    }}
+    }},
   ],
   where: [
     {
