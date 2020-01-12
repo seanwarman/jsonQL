@@ -267,11 +267,6 @@ ql.selectQL({
       where: [{name: 'assignedUserKey', is: 'userKey'}]
     }}
   ],
-  where: [
-    {
-      name: 'bookingsKey',
-      is: '0021ecb0-20ee-11ea-8236-771da2034d25',
-    }
-  ],
+  where: [{name: 'bookingsKey', is: '0021ecb0-20ee-11ea-8236-771da2034d25'}],
   limit: [0,5]
 })
