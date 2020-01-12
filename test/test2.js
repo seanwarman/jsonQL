@@ -1,16 +1,56 @@
 const mysql = require('mysql2/promise');
-const connection = require('./config');
-class main {
+const connection = require('../../configs/bmsConfig');
+class JsonQL {
 
   constructor(schema) {
     this.schema = schema;
+    this.errors = [];
+    this.fatalError = '';
     this.joinTables = [];
 
     this.select = [];
     this.from = '';
     this.join = [];
-    this.where = [];
     this.having = [];
+    this.where = [];
+  }
+  
+  selectQL({db, table, columns, where, having, limit}) {
+    // TODO: Check keys and values
+    
+    this.from = `${db}.${table}`;
+
+    if(columns && (columns || []).length > 0) {
+      this.parseCols(db, table, columns);
+    }
+
+    if(where && (where || []).length > 0) {
+      this.parseWhere(db, table, where);
+    }
+
+    if(having && (having || []).length > 0) {
+      this.parseHaving(having);
+    }
+
+    if(limit) {
+      this.limit = limit;
+    }
+
+    const selectString = this.buildSelect();
+    
+    if(this.fatalError.length > 0) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
   }
 
   parseCols(db, table, columns) {
@@ -79,6 +119,7 @@ class main {
       this.select.push(selectStr);
     })
   }
+
   aliasReplicaTableNames(table) {
     let aliasTableName;
     const numOfReplicas = this.joinTables.filter(tableName => tableName === table).length;
@@ -90,6 +131,7 @@ class main {
       return table;
     }
   }
+
   selectJoinCols(db, table, joinCols) {
     joinCols.forEach(col => {
 
@@ -145,7 +187,7 @@ class main {
 
   buildSelect() {
 
-    let select = '*';
+    let select = '';
     if(this.select.length > 0) {
       select = `SELECT ${this.select.map(selStr => selStr).join()}`;
     }
@@ -181,118 +223,84 @@ class main {
       ${limit}
     `
   }
-  
-  async selectQL({db, table, columns, where, having, limit}) {
-    // TODO: Check keys and values
-    
-    this.from = `${db}.${table}`;
 
-    if(columns && (columns || []).length > 0) {
-      this.parseCols(db, table, columns);
-    }
-
-    if(where && (where || []).length > 0) {
-      this.parseWhere(db, table, where);
-    }
-
-    if(having && (having || []).length > 0) {
-      this.parseHaving(having);
-    }
-
-    if(limit) {
-      this.limit = limit;
-    }
-    
-    // console.log('this :', this);
-
-    const selectQuery = this.buildSelect();
-
-    const con = await mysql.createConnection(connection);
-
-    let result;
-
-    try {
-      result = await con.query(selectQuery);
-    } catch (error) {
-      console.log('error :', error);
-      con.close();
-    }
-
-    con.close();
-
-    console.log('result :', result[0]);
-  }
 
   
   
 
 }
 
+const main = async() => {
 
-const ql = new main();
+  const ql = new JsonQL();
 
-  // ## JoinObject                           ## WhereObject
-                                        
-  // const JoinObject = {                    const WhereObject = {
-  //   db: String,                             name: String,
-  //   table: String,                          is: String,
-  //   where: [WhereObject],                   isnot: String,
-  //   columns: [ColumnObject]                 or: WhereObject
-  // }                                       }
+  const queryOb = ql.selectQL({
+    db: 'bms_booking',
+    table: 'bookings',
+    limit: [0,5]
+  });
 
-  
-  // ## ColumnObject                         
-                                          
-  // const ColumnObject = {                  
-  //   name: String,                         
-  //   string: String,                         
-  //   number: String/Number,                         
-  //   fn: String,
-  //   args: [ColumnObject],
-  //   as: String,                           
-  //   join: JoinObject
-  // }
+  const con = await mysql.createConnection(connection);
 
-ql.selectQL({
-  db: 'bms_booking',
-  table: 'bookings',
-  columns: [
-    {name: 'bookingName'},
-    {name: 'bookingsKey'},
-    {join: {
-      db: 'Biggly',
-      table: 'users',
-      columns: [
-        {
-          fn: 'CONCAT',
-          args: [
-            {name: 'firstName'},
-            {string: ' '},
-            {name: 'lastName'},
-          ],
-          as: 'createdName'
-        }
-      ],
-      where: [{name: 'createdUserKey', is: 'userKey'}]
-    }},
-    {join: {
-      db: 'Biggly',
-      table: 'users',
-      columns: [
-        {
-          fn: 'CONCAT',
-          args: [
-            {name: 'firstName'},
-            {string: ' '},
-            {name: 'lastName'},
-          ],
-          as: 'assignedName'
-        }
-      ],
-      where: [{name: 'assignedUserKey', is: 'userKey'}]
-    }}
-  ],
-  where: [{name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'}],
-  having: [{name: 'createdName', is: 'Carl Williams'}],
-  limit: [0,5]
-})
+  let result;
+
+  try {
+    result = await con.query(queryOb.query);
+  } catch (error) {
+    console.log('error :', error);
+    con.close();
+  }
+
+  con.close();
+
+  console.log('result :', result[0]);
+}
+
+main();
+
+
+const queries = [
+  {
+    db: 'bms_booking',
+    table: 'bookings',
+    columns: [
+      {name: 'bookingName'},
+      {name: 'bookingsKey'},
+      {join: {
+        db: 'Biggly',
+        table: 'users',
+        columns: [
+          {
+            fn: 'CONCAT',
+            args: [
+              {name: 'firstName'},
+              {string: ' '},
+              {name: 'lastName'},
+            ],
+            as: 'createdName'
+          }
+        ],
+        where: [{name: 'createdUserKey', is: 'userKey'}]
+      }},
+      {join: {
+        db: 'Biggly',
+        table: 'users',
+        columns: [
+          {
+            fn: 'CONCAT',
+            args: [
+              {name: 'firstName'},
+              {string: ' '},
+              {name: 'lastName'},
+            ],
+            as: 'assignedName'
+          }
+        ],
+        where: [{name: 'assignedUserKey', is: 'userKey'}]
+      }}
+    ],
+    where: [{name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'}],
+    having: [{name: 'createdName', is: 'Carl Williams'}],
+    limit: [0,5]
+  },
+]
