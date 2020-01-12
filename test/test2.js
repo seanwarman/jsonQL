@@ -1,5 +1,5 @@
 const mysql = require('mysql2/promise');
-const connection = require('../../scratchpad-bms-api/config/dbConfig');
+const connection = require('./config');
 class main {
 
   constructor(schema) {
@@ -10,6 +10,7 @@ class main {
     this.from = '';
     this.join = [];
     this.where = [];
+    this.having = [];
   }
 
   parseCols(db, table, columns) {
@@ -29,6 +30,20 @@ class main {
       this.selectFnCols(db, table, fnCols);
     }
     
+  }
+
+  parseHaving(having) {
+    having.forEach(ha => {
+      let havingStr = `${this.haString(ha)}`;
+      this.having.push(havingStr);
+    });
+  }
+
+  haString(ha) {
+    if(!ha.or) {
+      return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
+    }
+    return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`} OR ${this.haString(ha.or)}`;
   }
 
   parseWhere(db, table, where) {
@@ -139,12 +154,17 @@ class main {
 
     let join = '';
     if(this.join.length > 0) {
-      join = `${this.join.map(jStr => `LEFT JOIN ${jStr}`).join(' ')}`
+      join = `${this.join.map(jStr => `LEFT JOIN ${jStr}`).join(' ')}`;
     }
 
     let where = '';
     if(this.where.length > 0) {
-      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    }
+
+    let having = '';
+    if(this.having.length > 0) {
+      having = `HAVING ${this.having.map(haStr => `(${haStr})`).join(' AND ')}`;
     }
 
     let limit = '';
@@ -157,11 +177,12 @@ class main {
       ${from}
       ${join}
       ${where}
+      ${having}
       ${limit}
     `
   }
   
-  async selectQL({db, table, columns, where, limit}) {
+  async selectQL({db, table, columns, where, having, limit}) {
     // TODO: Check keys and values
     
     this.from = `${db}.${table}`;
@@ -174,6 +195,10 @@ class main {
       this.parseWhere(db, table, where);
     }
 
+    if(having && (having || []).length > 0) {
+      this.parseHaving(having);
+    }
+
     if(limit) {
       this.limit = limit;
     }
@@ -182,7 +207,7 @@ class main {
 
     const selectQuery = this.buildSelect();
 
-    const con = await mysql.createConnection(connection.biggly);
+    const con = await mysql.createConnection(connection);
 
     let result;
 
@@ -267,6 +292,7 @@ ql.selectQL({
       where: [{name: 'assignedUserKey', is: 'userKey'}]
     }}
   ],
-  where: [{name: 'bookingsKey', is: '0021ecb0-20ee-11ea-8236-771da2034d25'}],
+  where: [{name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'}],
+  having: [{name: 'createdName', is: 'Carl Williams'}],
   limit: [0,5]
 })

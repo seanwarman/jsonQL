@@ -13,7 +13,7 @@ jsonQuery = {
     },
     {
       join: {
-        database: 'Biggly', // << if no 'database' param then assume this database. DONE
+        database: 'Biggly',
         table: 'partners', // << if there's more than one join between the same table then we shouldnt need 'as' jsonQL should just deal with it. DONE
         columns: [
           {name: 'partnerName', as: 'createdPartnerName'}
