@@ -2,7 +2,6 @@ module.exports = {
   db: 'bms_booking',
   table: 'bookings',
   columns: [
-    {name: 'bookingName'},
     {name: 'bookingsKey'},
     {join: {
       db: 'Biggly',
@@ -10,36 +9,22 @@ module.exports = {
       columns: [
         {
           fn: 'CONCAT',
-          args: [
-            {name: 'firstName'},
-            {string: ' '},
-            {name: 'lastName'},
-          ],
-          as: 'createdName'
+          args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
+          as: 'fullName'
         }
       ],
       where: [{name: 'createdUserKey', is: 'userKey'}]
     }},
-    {join: {
-      db: 'Biggly',
-      table: 'users',
-      columns: [
-        {
-          fn: 'CONCAT',
-          args: [
-            {name: 'firstName'},
-            {string: ' '},
-            {name: 'lastName'},
-          ],
-          as: 'assignedName'
-        }
-      ],
-      where: [{name: 'assignedUserKey', is: 'userKey'}]
-    }}
-  ],
-  where: [{name: 'bookingName', is: 'Barton%20Garage%20Services'}],
-  having: [
-    {name: 'createdName', is: 'Carl Williams'}
+    {
+      name: 'jsonForm',
+      as: 'bookingMonth',
+      jsonExtract: {search: 'Booking Month', target: 'value'}
+    },
+    {
+      fn: 'REPLACE',
+      args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}],
+      as: 'bookingNameFormatted'
+    },
   ],
   limit: [0,5]
 }

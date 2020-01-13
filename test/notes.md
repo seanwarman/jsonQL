@@ -50,6 +50,8 @@ const WhereObject = {
 
 - ~~Add `jsonExtract` key to the `ColumnObject`.~~
 
+- Add a COUNT to the SELECTs like in the bookings get.
+
 - Add an primary auto increment key to the schema.
 
 
