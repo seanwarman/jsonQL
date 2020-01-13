@@ -1,5 +1,5 @@
 const mysql = require('mysql2/promise');
-const connection = require('../../configs/bmsConfig');
+const connection = require('./config');
 const schema = require('../../bms-api/general/schema/admin');
 
 class JsonQL {
@@ -10,10 +10,14 @@ class JsonQL {
     this.joinTables = [];
 
     this.select = [];
-    this.from = '';
+    this.from = {db: '', table: ''};
     this.join = [];
     this.having = [];
     this.where = [];
+    this.columns = [];
+    this.values = [];
+
+    this.selectDefaultCols = false;
   }
 
   // █▀▀ █▀▀ █░░ █▀▀ █▀▀ ▀▀█▀▀
@@ -21,32 +25,29 @@ class JsonQL {
   // ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░
 
   selectQL({db, table, columns, where, having, limit}) {
-    if(this.validBySchema(db, table)) {
-      this.from = `${db}.${table}`;
-    } else {
+    this.parseJson({db, table, columns, where, having, limit})
+
+    const selectString = this.buildSelect();
+
+    if(this.fatalError) {
       return {
         status: 'error',
+        query: selectString,
         errors: this.errors
       }
     }
 
-    if(columns && (columns || []).length > 0) {
-      this.parseCols(db, table, columns);
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
     }
+  }
 
-    if(where && (where || []).length > 0) {
-      this.pushWhere(db, table, where);
-    }
+  createQL({db, table, columns, where, having, limit}, data) {
+    this.parseJson({db, table, columns, where, having, limit}, data)
 
-    if(having && (having || []).length > 0) {
-      this.pushHaving(having);
-    }
-
-    if(limit) {
-      this.limit = limit;
-    }
-
-    const selectString = this.buildSelect();
+    const selectString = this.buildCreate();
 
     if(this.fatalError) {
       return {
@@ -67,37 +68,95 @@ class JsonQL {
   // █░░█ █▄▄█ █▄▄▀ ▀▀█ █▀▀ █▄▄▀ ▀▀█
   // █▀▀▀ ▀░░▀ ▀░▀▀ ▀▀▀ ▀▀▀ ▀░▀▀ ▀▀▀
 
-  parseCols(db, table, columns, aliasTableName = null) {
-    if(!this.validBySchema(db, table)) {
-      return;
+  parseJson({db, table, columns, where, having, limit}, data) {
+    if(this.validBySchema(db, table)) {
+      this.from = {db, table};
     } else {
-      this.db = db;
-      this.table = table;
+      this.fatalError = true;
+      return;
     }
+
+    if(columns.filter(col => col.name).length === 0) {
+      this.selectDefaultCols = true;
+    }
+
+    if(data) {
+      this.parseData(
+        db,
+        table,
+        data
+      )
+    }
+
+    if(columns && (columns || []).length > 0) {
+      this.parseCols(
+        {dbName: db, dbAlias: db},
+        {tableName: table, tableAlias: table}, 
+        columns
+      );
+    }
+
+    if(where && (where || []).length > 0) {
+      this.pushWhere(
+        {dbName: db, dbAlias: db},
+        {tableName: table, tableAlias: table}, 
+        where
+      );
+    }
+
+    if(having && (having || []).length > 0) {
+      this.pushHaving(having);
+    }
+
+    if(limit) {
+      this.limit = limit;
+    }
+  }
+
+  parseData(db, table, data) {
+    Object.keys(data).forEach(key => {
+      if(!this.validBySchema(db, table, key)) return;
+
+      if(typeof data[key] === 'number') {
+        this.values.push(data[key]);
+      } else if(typeof data[key] === 'string') {
+        this.values.push(`'${data[key]}'`);
+      } else {
+        return;
+      }
+      this.columns.push(key);
+    })
+  }
+
+  parseCols(dbObj, tableObj, columns) {
+    if(!this.validBySchema(dbObj.dbName, tableObj.tableName)) {
+      return;
+    }
+
     const nameCols = columns.filter(col => col.name || col.number || col.string);
     const joinCols = columns.filter(col => col.join);
     const fnCols = columns.filter(col => col.fn);
 
     if(nameCols.length > 0) {
       this.pushNameCols(
-        db,
-        aliasTableName ? aliasTableName : table,
+        dbObj,
+        tableObj,
         nameCols
       );
     }
  
     if(joinCols.length > 0) {
       this.pushJoinCols(
-        db,
-        aliasTableName ? aliasTableName : table,
+        dbObj,
+        tableObj,
         joinCols
       );
     }
 
     if(fnCols.length > 0) {
       this.pushFnCols(
-        db,
-        aliasTableName ? aliasTableName : table,
+        dbObj,
+        tableObj,
         fnCols
       );
     }
@@ -108,11 +167,11 @@ class JsonQL {
   // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
   // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
 
-  pushNameCols(db, table, nameCols) {
+  pushNameCols(dbObj, tableObj, nameCols) {
     nameCols.forEach(col => {
       let selectStr = '';
-      if(col.name && this.validBySchema(this.db, this.table, col.name)) {
-        selectStr = `${db}.${table}.${col.name}`;
+      if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
+        selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
       }
       if(col.number && typeof col.number === 'number') {
         selectStr = `${col.number}`;
@@ -132,19 +191,17 @@ class JsonQL {
     })
   }
 
-  pushJoinCols(db, table, joinCols) {
+  pushJoinCols(dbObj, tableObj, joinCols) {
     joinCols.forEach(col => {
-      // TODO: fix the schema validation for joins, the aliasTableName breaks it.
-      // if(!this.validBySchema(this.db, this.table, col.join.where[0].name)) {
-      //   return;
-      // }
-      // These checks might break here because I think col.join.table might sometimes be an alias.
-      // if(col.join.where[0].isnot && !this.validBySchema(col.join.db, col.join.table, col.join.where[0].isnot)) {
-      //   return;
-      // }
-      // if(col.join.where[0].is && !this.validBySchema(col.join.db, col.join.table, col.join.where[0].is)) {
-      //   return;
-      // }
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, col.join.where[0].name)) {
+        return;
+      }
+      if(col.join.where[0].isnot) {
+        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].isnot)) return;
+      }
+      if(col.join.where[0].is) {
+        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].is)) return;
+      }
 
       let joinStr = '';
       let aliasTableName = this.aliasReplicaTableNames(col.join.table);
@@ -154,23 +211,33 @@ class JsonQL {
         aliasString = ` AS ${aliasTableName}`;
       }
       if(col.join.where[0].isnot) {
-        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${db}.${table}.${col.join.where[0].name} != ${col.join.db}.${aliasTableName}.${col.join.where[0].isnot}`;
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} != ${col.join.db}.${aliasTableName}.${col.join.where[0].isnot}`;
       }
       if(col.join.where[0].is) {
-        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${db}.${table}.${col.join.where[0].name} = ${col.join.db}.${aliasTableName}.${col.join.where[0].is}`;
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} = ${col.join.db}.${aliasTableName}.${col.join.where[0].is}`;
       }
 
       if(joinStr.length > 0) {
         this.join.push(joinStr);
       }
 
-      this.parseCols(col.join.db, col.join.table, col.join.columns, aliasTableName);
+      this.parseCols(
+        {dbName: col.join.db, dbAlias: col.join.db},
+        {tableName: col.join.table, tableAlias: aliasTableName},
+        col.join.columns
+      );
     });
   }
 
-  pushFnCols(db, table, fnCols) {
+  pushFnCols(dbObj, tableObj, fnCols) {
     fnCols.forEach(col => {
-      let selectStr = this.fnString(db, table, col.fn, col.args)
+      let selectStr = '';
+
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName)) {
+        return;
+      }
+      
+      selectStr = this.fnString(dbObj.dbAlias, tableObj.tableAlias, col.fn, col.args)
       if(col.as && this.validString(col.as)) {
         selectStr += ` AS ${col.as}`;
       }
@@ -180,9 +247,16 @@ class JsonQL {
     });
   }
 
-  pushWhere(db, table, where) {
+  pushWhere(dbObj, tableObj, where) {
     where.forEach(wh => {
-      let whereStr = `${this.whString(db, table, wh)}`;
+      let whereStr = '';
+      
+      // Is this right? I don't think you can use alias names in a where...
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        return;
+      }
+      
+      whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
       if(whereStr.length > 0) {
         this.where.push(whereStr);
       }
@@ -218,15 +292,7 @@ class JsonQL {
     return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`} OR ${this.haString(ha.or)}`;
   }
 
-  // parseWhere(db, table, where) {
-  //   where.forEach(wh => {
-  //     let whereStr = `${this.whString(db, table, wh)}`;
-  //     this.where.push(whereStr);
-  //   });
-  // }
-
   whString(db, table, wh) {
-    if(!this.validBySchema(db, table, wh.name)) return '';
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
     if(!wh.or) {
@@ -238,7 +304,7 @@ class JsonQL {
   fnString(db, table, fn, args) {
     if(!this.validString(fn)) return '';
     return `${fn}(${args.map(arg => {
-      if(arg.name && this.validBySchema(this.db, this.table, arg.name)) {
+      if(arg.name) {
         return `${db}.${table}.${arg.name}`; 
       }
       if(arg.number && typeof arg.number === 'number') {
@@ -255,9 +321,34 @@ class JsonQL {
     }).join()})`
   }
 
+  selStrFromSchema() {
+    const fromTable = this.schema[this.from.db][this.from.table];
+    return `${Object.keys(fromTable).filter(key => (
+      fromTable[key].hidden !== true
+    )).map(key => (
+      `${this.from.db}.${this.from.table}.${key}`
+    )).join()}`
+  }
+
   // █▀▀▄ █░░█ ░▀░ █░░ █▀▀▄ █▀▀ █▀▀█ █▀▀
   // █▀▀▄ █░░█ ▀█▀ █░░ █░░█ █▀▀ █▄▄▀ ▀▀█
   // ▀▀▀░ ░▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀▀▀ ▀░▀▀ ▀▀▀
+
+  buildCreate() {
+    let from = `INSERT INTO ${this.from.db}.${this.from.table}`;
+    
+    let columns = '';
+    if(this.columns.length > 0) {
+      columns = `(${this.columns.join()})`;
+    }
+    
+    let values = '';
+    if(this.values.length > 0) {
+      values = `VALUES (${this.values.join()})`;
+    }
+
+    return `${from} ${columns} ${values}`;
+  }
 
   buildSelect() {
     let select = '';
@@ -265,7 +356,13 @@ class JsonQL {
       select = `SELECT ${this.select.map(selStr => selStr).join()}`;
     }
 
-    let from = `FROM ${this.from}`;
+    // If there's no columns or joins included in the jsonQuery return all columns in
+    // the schema that don't have the `hidden` flag.
+    if(this.selectDefaultCols && select.length === 0) {
+      select = `SELECT ${this.selStrFromSchema()}`
+    }
+
+    let from = `FROM ${this.from.db}.${this.from.table}`;
 
     let join = '';
     if(this.join.length > 0) {
@@ -287,14 +384,8 @@ class JsonQL {
       limit = `LIMIT ${this.limit.map(num => num).join()}`
     }
 
-    return `
-      ${select}
-      ${from}
-      ${join}
-      ${where}
-      ${having}
-      ${limit}
-    `
+    return `${select} ${from} ${join} ${where} ${having} ${limit}`;
+
   }
 
   // █░░█ ▀▀█▀▀ ░▀░ █░░ ░▀░ ▀▀█▀▀ ░▀░ █▀▀ █▀▀
@@ -328,12 +419,12 @@ class JsonQL {
       this.fatalError = true;
       return false;
     }
-    if(table && !this.schema[db][table]) {
+    if(table && !(this.schema[db] || {})[table]) {
       this.errors.push(db + '.' + table + ' not found in schema');
       this.fatalError = true;
       return false;
     }
-    if(name && !this.schema[db][table][name]) {
+    if(name && !((this.schema[db] || {})[table] || {})[name]) {
       this.errors.push(db + '.' + table + '.' + name + ' not found in schema');
       return false;
     }

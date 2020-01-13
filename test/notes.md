@@ -37,13 +37,16 @@ const WhereObject = {
 
 ## TODO
 
-- Add schema and regex checking.
-  - regex checking is done but the schema needs to ignore alias table names rather than checking them
-  to the schema.
+- ~~Add schema and regex checking.~~
+  - ~~regex checking is done but the schema needs to ignore alias table names rather than checking them
+  to the schema.~~
 
-- If no `columns` is given then pass back all
-columns that exist in the schema.
+- ~~If no `columns` is given then pass back all columns that exist in the schema.~~
+
+- Add update, delete and ~~create~~.
 
 - Add `jsonExtract` key to the `ColumnObject`.
 
 - Add `orderBy` key to the `JoinObject`.
+
+- Add an primary auto increment key to the schema.
