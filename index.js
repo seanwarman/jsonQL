@@ -1,498 +1,511 @@
-module.exports = class jsonQL {
+module.exports = class JsonQL {
   constructor(schema) {
-    this.selectString = '';
-    this.joinString = '';
-    this.whereString = '';
-    this.insertString = '';
-    this.queryString = '';
-    this.deleteString = '';
-    
-    this.joinTables = [];
-    this.errors = [];
-    this.fatalError = null;
-    this.regex = /(drop )|;|(update )( truncate)/gi;
-
     this.schema = schema;
-    
+    this.errors = [];
+    this.fatalError = false;
+    this.joinTables = [];
+    this.all = false;
+
+    this.select = [];
+    this.from = {db: '', table: ''};
+    this.join = [];
+    this.having = [];
+    this.where = [];
+    this.limit = [];
+    this.columns = [];
+    this.values = [];
+    this.orderBy = '';
+    this.ascOrDesc = '';
   }
 
-  init(jsonQuery, data = null) {
-    this.jsonQuery = jsonQuery;
-    this.primaryDBName = jsonQuery.db;
-    this.primaryTableName = jsonQuery.table;
-    
-    this.data = data;
+  // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
+  // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
+  // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
 
-    this.primaryDBSchema = this.schema[this.primaryDBName]
-    if (!this.primaryDBSchema) {
-      this.fatalError = {status: 'error', message: 'This primary db name was not found in the schema: ' + this.primaryDBName};
-      return;
-    }
+  selectQL({db, table, columns, where, having, limit, orderBy}) {
+    this.initJsonQL({db, table, columns, where, having, limit, orderBy})
 
-    this.primaryTableSchema = this.primaryDBSchema[this.primaryTableName]
-    if (!this.primaryTableSchema) {
-      this.fatalError = {status: 'error', message: `The table named: ${this.primaryTableName}, could not be found in: ${this.primaryDBName}.`}
-      return;
-    }
-
-    this.fromString = `FROM ${this.primaryDBName}.${this.primaryTableName}`
-  }
-
-  // █▀▀ █▀▀▄ ▀▀█▀▀ █▀▀█ █░░█ █▀▀█ █▀▀█ ░▀░ █▀▀▄ ▀▀█▀▀ █▀▀
-  // █▀▀ █░░█ ░░█░░ █▄▄▀ █▄▄█ █░░█ █░░█ ▀█▀ █░░█ ░░█░░ ▀▀█
-  // ▀▀▀ ▀░░▀ ░░▀░░ ▀░▀▀ ▄▄▄█ █▀▀▀ ▀▀▀▀ ▀▀▀ ▀░░▀ ░░▀░░ ▀▀▀
-
-  selectQL(jsonQuery) {
-    this.init(jsonQuery)
-    if(this.fatalError) return this.fatalError;
-    return this.selectQuery();
-  }
-  createQL(jsonQuery, data) {
-    this.init(jsonQuery, data)
-    if(this.fatalError) return this.fatalError;
-    return this.createQuery();
-  }
-  updateQL(jsonQuery, data) {
-    this.init(jsonQuery, data)
-    if(this.fatalError) return this.fatalError;
-    return this.updateQuery();
-  }
-  deleteQL(jsonQuery) {
-    this.init(jsonQuery);
-    if(this.fatalError) return this.fatalError;
-    return this.deleteQuery();
-  }
-
-  // █▀▀ █▀▀ █░░ █▀▀ █▀▀ ▀▀█▀▀
-  // ▀▀█ █▀▀ █░░ █▀▀ █░░ ░░█░░
-  // ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░  
-  
-  selectQuery(jsonQuery = this.jsonQuery) {
-
-    this.handleJoins(
-      jsonQuery.db, 
-      jsonQuery.table, 
-      jsonQuery.columns
-    );
-
-    this.handleExtract(
-      jsonQuery.db,
-      jsonQuery.table,
-      jsonQuery.columns
-    )
-
-    this.handleFormat(
-      jsonQuery.db,
-      jsonQuery.table,
-      jsonQuery.columns
-    )
-
-    this.select(
-      jsonQuery.db, 
-      jsonQuery.table, 
-      jsonQuery.columns
-    );
-    
-    this.where(
-      jsonQuery.db, 
-      jsonQuery.table, 
-      jsonQuery.where
-    );
+    const selectString = this.buildSelect();
 
     if(this.fatalError) {
-      return this.fatalError;
-    }
-    
-    if(this.errors.length > 0) {
-      return {status: 'error', query: null, message: 'Query failed', errors: this.errors.join(' and ')};
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
     }
 
-    this.buildSelect(this.jsonQuery);
-    return {status: 'success', query: this.queryString, message: 'Query successful', errors: this.errors.join(' and ')};
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
   }
 
-  select(db, table, columns, alias = table) {
-
-    const schema = this.schema;
-    
-    if(!schema[db]) {
-      this.errors.push(db + ' db not found in schema');
-      return;
-    }
-    if(!schema[db][table]) {
-      this.errors.push(db + '.' + table + ' not found in schema');
-      return;
+  createQL({db, table, columns, where, having, limit}, data) {
+    if(!data) {
+      this.errors.push('Data must be provided in a createQL');
+      this.fatalError = true;
     }
 
-    let dbAndTable = '';
-    if(table !== alias) {
-      dbAndTable = alias;
-    } else {
-      dbAndTable = `${db}.${table}`;
-    }
-    
-    const plainCols = (columns || []).filter(col => !col.join && !col.jsonExtract);
-    
-    if(plainCols.length === 0) {
-      if(this.selectString.length === 0) {
-        this.selectString += `${dbAndTable}.*`;
-      } else {
-        this.selectString += `, ${dbAndTable}.*`;
+    this.initJsonQL({db, table, columns, where, having, limit}, data)
+
+    const selectString = this.buildCreate();
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
       }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
+  }
+
+  updateQL({db, table, columns, where, having, limit, affectAll}, data) {
+    if(!data) {
+      this.errors.push('Data must be provided in a updateQL');
+      this.fatalError = true;
+    }
+
+    this.initJsonQL({db, table, columns, where, having, limit, affectAll}, data)
+
+    const selectString = this.buildUpdate();
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
+  }
+
+  deleteQL({db, table, columns, where, having, limit, affectAll}) {
+    this.initJsonQL({db, table, columns, where, having, limit, affectAll})
+
+    const selectString = this.buildDelete();
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
+  }
+
+  // █▀▀ █▀▀▄ ▀▀█▀▀ █▀▀█ █░░█ █▀▀█ █▀▀█ ░▀░ █▀▀▄ ▀▀█▀▀
+  // █▀▀ █░░█ ░░█░░ █▄▄▀ █▄▄█ █░░█ █░░█ ▀█▀ █░░█ ░░█░░
+  // ▀▀▀ ▀░░▀ ░░▀░░ ▀░▀▀ ▄▄▄█ █▀▀▀ ▀▀▀▀ ▀▀▀ ▀░░▀ ░░▀░░
+
+  initJsonQL({db, table, columns, where, having, limit, orderBy, affectAll}, data) {
+    if(this.validBySchema(db, table)) {
+      this.from = {db, table};
+    } else {
+      this.fatalError = true;
       return;
     }
-    
-    plainCols.forEach((col) => {
-      if(!this.schema[db][table][col.name]) {
+
+    if(affectAll) {
+      this.affectAll = affectAll;
+    }
+
+    if(data) {
+      this.parseData(db, table, data)
+    }
+
+    if(columns && (columns || []).length > 0) {
+      this.pushCols(
+        {dbName: db, dbAlias: db},
+        {tableName: table, tableAlias: table}, 
+        columns
+      );
+    }
+
+    // If there's no selections then get all non-hidden columns from the schema
+    if(this.select.length === 0) {
+      this.pushSelFromSchema(db, table);
+    }
+
+    if(where && (where || []).length > 0) {
+      this.pushWhere(
+        {dbName: db, dbAlias: db},
+        {tableName: table, tableAlias: table}, 
+        where
+      );
+    }
+
+    if(having && (having || []).length > 0) {
+      this.pushHaving(having);
+    }
+
+    if(orderBy) {
+      this.pushOrderBy(
+        db,
+        table,
+        orderBy
+      );
+    }
+
+    if(limit) {
+      this.limit = limit;
+    }
+  }
+
+  // █▀▀▄ █▀▀█ ▀▀█▀▀ █▀▀█
+  // █░░█ █▄▄█ ░░█░░ █▄▄█
+  // ▀▀▀░ ▀░░▀ ░░▀░░ ▀░░▀
+
+  parseData(db, table, data) {
+    Object.keys(data).forEach(key => {
+      if(!this.validBySchema(db, table, key)) return;
+
+      if(typeof data[key] === 'number') {
+        this.values.push(data[key]);
+      } else if(typeof data[key] === 'string') {
+        this.values.push(`'${data[key]}'`);
+      } else {
         return;
       }
-      this.selectOne(`${dbAndTable}.${col.name}`, col)
-    });
+      this.columns.push(key);
+    })
   }
 
-  selectOne(selection, col) {
-    let as = '';
-    if(col.as && !this.invalid(col.as)) {
-      as = ` AS ${col.as}`
-    }
-    if(this.selectString.length === 0) {
-      this.selectString = `${selection}${as}`;
-    } else {
-      this.selectString += `, ${selection}${as}`
-    }
-  }
+  // █▀▀█ █░░█ █▀▀ █░░█   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
+  // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
+  // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
 
-  buildSelect(jsonQuery) {
-    this.queryString = `SELECT ${this.selectString} ${this.fromString}${this.joinString}`;
-    if(this.whereString.length > 0) {
-      this.queryString += ` ${this.whereString}`;
+  pushOrderBy(db, table, orderBy) {
+    if(!this.validBySchema(db, table, orderBy.name)) {
+      return;
     }
-    if(jsonQuery.limit) {
-      this.limit(this.jsonQuery.limit);
-    }
-    if(jsonQuery.orderBy) {
-      this.orderBy(jsonQuery.orderBy);
-    }
-  }
+    this.orderBy = orderBy.name;
 
-  // █▀▀ █▀▀█ █▀▀ █▀▀█ ▀▀█▀▀ █▀▀
-  // █░░ █▄▄▀ █▀▀ █▄▄█ ░░█░░ █▀▀
-  // ▀▀▀ ▀░▀▀ ▀▀▀ ▀░░▀ ░░▀░░ ▀▀▀
+
+    if(orderBy.desc && typeof orderBy.desc !== 'boolean') {
+      this.errors.push('orderBy.desc must be a Boolean type value.')
+      return;
+    }
+    this.ascOrDesc = orderBy.desc ? 'DESC' : 'ASC';
     
-  createQuery(jsonQuery = this.jsonQuery, data = this.data) {
-
-    this.insert(
-      jsonQuery.db, 
-      jsonQuery.table, 
-      data
-    );
-
-    if(this.fatalError) {
-      return this.fatalError;
-    }
-    
-    if(this.errors.length > 0) {
-      return {status: 'error', query: null, message: 'Query failed', errors: this.errors.join(' and ')};
-    }
-
-    return {status: 'success', query: this.insertString, message: 'Query successful', errors: this.errors.join(' and ')};
-
   }
 
-  insert(db, table, data) {
-
-    let cols = Object.keys(data).filter(col => {
-      if(!this.schemaValid(db, table, col)) {
-        this.errors.push(`${col} is an invalid column for ${db}.${table}`);
-        return false;
-      }
-      return true;
-    });
-
-    let values = Object.values(data).map(val => {
-      if(typeof val === 'string') return `'${val}'`
-      if(typeof val === 'number') return val;
-    }).join();
-
-    this.insertString = `INSERT INTO ${db}.${table}
-      (${cols.join()})
-      VALUES
-      (${values})
-    `;
-
-  }
-
-  // █░░█ █▀▀█ █▀▀▄ █▀▀█ ▀▀█▀▀ █▀▀
-  // █░░█ █░░█ █░░█ █▄▄█ ░░█░░ █▀▀
-  // ░▀▀▀ █▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀  
-
-  updateQuery(jsonQuery = this.jsonQuery, data = this.data) {
-    this.update(
-      jsonQuery.db, 
-      jsonQuery.table, 
-      data
-    )
-      
-    this.where(
-      jsonQuery.db,
-      jsonQuery.table,
-      jsonQuery.where
-    )
-
-    if(this.fatalError) {
-      return this.fatalError;
-    }
-    
-    if(this.errors.length > 0) {
-      return {status: 'error', query: null, message: 'Query failed', errors: this.errors.join(' and ')};
+  pushCols(dbObj, tableObj, columns) {
+    if(!this.validBySchema(dbObj.dbName, tableObj.tableName)) {
+      return;
     }
 
-    this.buildUpdate()
-    return {status: 'success', query: this.queryString, message: 'Query successful', errors: this.errors.join(' and ')};
+    const nameCols = columns.filter(col => col.name || col.number || col.string);
+    const joinCols = columns.filter(col => col.join);
+    const fnCols = columns.filter(col => col.fn);
+
+    if(nameCols.length > 0) {
+      this.pushNameCols(
+        dbObj,
+        tableObj,
+        nameCols
+      );
+    }
+ 
+    if(joinCols.length > 0) {
+      this.pushJoinCols(
+        dbObj,
+        tableObj,
+        joinCols
+      );
+    }
+
+    if(fnCols.length > 0) {
+      this.pushFnCols(
+        dbObj,
+        tableObj,
+        fnCols
+      );
+    }
+
   }
   
-  update(db, table, data) {
-    this.updateString = `UPDATE ${db}.${table} SET ${Object.keys(data).filter(col => {
-      if(!this.schemaValid(db, table, col)) return false;
-      if(data[col] === null) return false;
-      if(data[col] === undefined) return false;
-      return true
+  pushSelFromSchema(db ,table) {
+    const fromTable = this.schema[db][table];
+    return `${Object.keys(fromTable).filter(key => (
+      fromTable[key].hidden !== true
+    )).forEach(key => {
+      this.select.push(`${db}.${table}.${key}`);
+    })}`
+  }
+
+  pushNameCols(dbObj, tableObj, nameCols) {
+    nameCols.forEach(col => {
+      let selectStr = '';
+      if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
+        selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
+      }
+      if(col.number && typeof col.number === 'number') {
+        selectStr = `${col.number}`;
+      } else if(col.number) {
+        this.errors.push(col.number + ' is not a number');
+      }
+      if(col.string && this.validString(col.string)) {
+        selectStr = `'${col.string}'`;
+      }
+      if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
+        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
+      }
+      if(col.as && this.validString(col.as)) {
+        selectStr += ` AS ${col.as}`;
+      }
+      if(selectStr.length > 0) {
+        this.select.push(selectStr);
+      }
     })
-    .map(col => {
-      // If a string make sure you add single quotes, if length is 0 replace value with NULL...
-      if(typeof data[col] === 'string') return data[col].length > 0 ? `${col} = '${data[col]}'` : `${col} = NULL` 
-      if(typeof data[col] === 'number') return `${col} = ${data[col]}`
-    }).join()}`
   }
 
-  buildUpdate() {
-    this.queryString = `${this.updateString} ${this.whereString}`;
-  }
+  pushJoinCols(dbObj, tableObj, joinCols) {
+    joinCols.forEach(col => {
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, col.join.where[0].name)) {
+        return;
+      }
+      if(col.join.where[0].isnot) {
+        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].isnot)) return;
+      }
+      if(col.join.where[0].is) {
+        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].is)) return;
+      }
 
-  // █▀▀▄ █▀▀ █░░ █▀▀ ▀▀█▀▀ █▀▀
-  // █░░█ █▀▀ █░░ █▀▀ ░░█░░ █▀▀
-  // ▀▀▀░ ▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░ ▀▀▀
+      let joinStr = '';
+      let aliasTableName = this.aliasReplicaTableNames(col.join.table);
+      let aliasString = '';
 
-  deleteQuery(jsonQuery = this.jsonQuery) {
-    this.deleteString = `DELETE ${this.fromString}`
-      
-    this.where(
-      jsonQuery.db,
-      jsonQuery.table,
-      jsonQuery.where
-    )
+      if(col.join.table !== aliasTableName) {
+        aliasString = ` AS ${aliasTableName}`;
+      }
+      if(col.join.where[0].isnot) {
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} != ${col.join.db}.${aliasTableName}.${col.join.where[0].isnot}`;
+      }
+      if(col.join.where[0].is) {
+        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} = ${col.join.db}.${aliasTableName}.${col.join.where[0].is}`;
+      }
 
-    if(this.fatalError) {
-      return this.fatalError;
-    }
-    
-    if(this.errors.length > 0) {
-      return {status: 'error', query: null, message: 'Query failed', errors: this.errors.join(' and ')};
-    }
+      if(joinStr.length > 0) {
+        this.join.push(joinStr);
+      }
 
-    this.queryString = `${this.deleteString} ${this.whereString}`;
-    
-    return {status: 'success', query: this.queryString, message: 'Query successful', errors: this.errors.join(' and ')};
-
-  }
-
-  // ░░▀ █▀▀█ ░▀░ █▀▀▄
-  // ░░█ █░░█ ▀█▀ █░░█
-  // █▄█ ▀▀▀▀ ▀▀▀ ▀░░▀
-
-  join(joinObj) {
-    const db = joinObj.db;
-    const table = joinObj.table;
-    if(!this.schema[db]) {
-      this.errors.push(db + ' db not found in schema');
-      return;
-    }
-    if(!this.schema[db][table]) {
-      this.errors.push(db + '.' + table + ' not found in schema');
-      return;
-    }
-    if(!joinObj.where) {
-      this.errors.push('No "where" parameter found in one of your join objects');
-      return;
-    }
-    if(!joinObj.where.name) {
-      this.errors.push('No "where.name" parameter found in one of your join objects');
-      return;
-    }
-    if(!joinObj.where.is) {
-      this.errors.push('No "where.is" parameter found in one of your join objects');
-      return;
-    }
-
-    const primarySelection = `${this.primaryDBName}.${this.primaryTableName}`;
-    let selection = `${db}.${table}`;
-    const where = joinObj.where;
-
-    const aliasTableName = this.aliasReplicaTableNames(table);
-
-
-
-    if(aliasTableName !== table) {
-      this.joinString += ` LEFT JOIN ${selection} AS ${aliasTableName} ON ${primarySelection}.${where.name} = ${aliasTableName}.${where.is}`;
-    } else {
-      this.joinString += ` LEFT JOIN ${selection} ON ${primarySelection}.${where.name} = ${selection}.${where.is}`;
-    }
-  }
-
-  handleJoins(db, table, columns) {
-
-    const colsWithJoin = (columns || []).filter(col => col.join);
-    if(colsWithJoin.length === 0) return;
-    colsWithJoin.forEach(col => {
-      this.join(col.join)
-    });
-    colsWithJoin.forEach((col,i) => {
-      this.handleFormat(
-        col.join.db,
-        col.join.table,
-        col.join.columns,
-        this.joinTables[i]
-      )
-      this.select(
-        col.join.db, 
-        col.join.table, 
-        col.join.columns, 
-        this.joinTables[i]
+      this.pushCols(
+        {dbName: col.join.db, dbAlias: col.join.db},
+        {tableName: col.join.table, tableAlias: aliasTableName},
+        col.join.columns
       );
     });
   }
-  
-  // █▀▀█ ▀▀█▀▀ █░░█ █▀▀ █▀▀█ █▀▀
-  // █░░█ ░░█░░ █▀▀█ █▀▀ █▄▄▀ ▀▀█
-  // ▀▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀ ▀░▀▀ ▀▀▀
 
-  where(db, table, where) {
-    if(!where) return;
-    this.whereString = where.reduce((str, whereObj) => {
-      if(whereObj.name && !this.schemaValid(db, table, whereObj.name)) {
-        return str;
-      }
-      if(str.length === 0) {
-        str = `WHERE `;
-      } else {
-        str += ` AND `;
-      }
+  pushFnCols(dbObj, tableObj, fnCols) {
+    fnCols.forEach(col => {
+      let selectStr = '';
 
-      if(whereObj.or) {
-        let or = whereObj.or.filter(orObj => {
-          return this.schemaValid(db, table, orObj.name)
-        })
-        .map(orObj => {
-          return `${db}.${table}.${orObj.name} ${orObj.is ? `= '${orObj.is}'` : `!= '${orObj.isnot}'`}` 
-        })
-        .join(' OR ');
-        if(or.length > 0) return str + `(${or})`;
-        return str;
-      } else {
-        return str + `${db}.${table}.${whereObj.name} ${whereObj.is ? `= '${whereObj.is}'` : `!= '${whereObj.isnot}'`}`;
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName)) {
+        return;
       }
       
-    },'')
+      selectStr = this.fnString(dbObj.dbAlias, tableObj.tableAlias, col.fn, col.args)
+      if(col.as && this.validString(col.as)) {
+        selectStr += ` AS ${col.as}`;
+      }
+      if(selectStr.length > 0) {
+        this.select.push(selectStr)
+      }
+    });
   }
 
-  limit(limit) {
-    if(limit && (limit || []).length === 2) {
-      const start = limit[0];
-      const end = limit[1];
-      if(typeof start !== 'number' || typeof end !== 'number') {
-        this.fatalError = {status: 'error', message: 'The limit array must contain numbers only.'};
-      }
-      this.queryString += ` LIMIT ${start}, ${end}`;
-    }
-  }
-
-  orderBy(orderBy) {
-    if(orderBy) {
-      // I don't know good way to properly check the order by parameter.
-      // We'll have to do a regex...
-      if(this.regex.test(orderBy.name)) {
-        this.fatalError = {status: 'error', message: `This orderBy value didn't pass the validation test: ${orderBy.name}`};
-        return;
-      }
-      const ascDesc = orderBy.asc ? ' ASC' : ' DESC';
-      this.queryString += ` ORDER BY ${orderBy.name}${ascDesc}`;
-    }
-  }
-
-  // █▀▀ █▀▀█ █▀▀ █▀▀ ░▀░ █▀▀█ █░░   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
-  // ▀▀█ █░░█ █▀▀ █░░ ▀█▀ █▄▄█ █░░   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
-  // ▀▀▀ █▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀░░▀ ▀▀▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
-  
-  handleFormat(db, table, columns, alias = table) {
-    console.log('handling format cols')
-    const colsWithFormat = (columns || []).filter(col => col.format);
-    console.log('colsWithFormat :', colsWithFormat);
-    if(colsWithFormat.length === 0) return;
-
-    colsWithFormat.forEach((col,i) => {
-      if(this.invalid(col.as)) {
-        this.errors.push(`${col.as} not allowed`);
-        return;
-      }
-
-      let stringErrIndex = col.format.args.findIndex(arg => arg.string && this.invalid(arg.string))
-      if(stringErrIndex !== -1) {
-        this.errors.push(`${col.format.args[stringErrIndex].string} - not allowed in ${col.format.fn}`);
-        return;
-      }
-
-      let nameErrIndex = col.format.args.findIndex(arg => arg.name && !this.schema[db][table][arg.name])
-      if(nameErrIndex !== -1) {
-        this.errors.push(`${db}.${table}.${col.format.args[nameErrIndex].name} - not found in the shema`);
-        return;
-      }
-
-      if(this.invalid(col.format.fn)) {
-        this.errors.push(`${col.format.fn} - not allowed`);
-        return;
-      }
-
-      let dbAndTable = '';
-      if(table !== alias) {
-        dbAndTable = alias;
-      } else {
-        dbAndTable = `${db}.${table}`;
-      }
-
-      const selection = `${col.format.fn}(${col.format.args.map(arg => {
-        if(arg.string) return `'${arg.string}'`;
-        if(arg.name) return `${dbAndTable}.${arg.name}`;
-      }).join()})`;
-
-      this.selectOne(selection, col);
+  pushWhere(dbObj, tableObj, where) {
+    where.forEach(wh => {
+      let whereStr = '';
       
-    })
+      // Is this right? I don't think you can use alias names in a where...
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        return;
+      }
+      
+      whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+      if(whereStr.length > 0) {
+        this.where.push(whereStr);
+      }
+    });
+  }
+
+  pushHaving(having) {
+    having.forEach(ha => {
+      let havingStr = `${this.haString(ha)}`;
+      if(havingStr.length > 0) {
+        this.having.push(havingStr);
+      }
+    });
+  }
+
+  // █▀▀ ▀▀█▀▀ █▀▀█ ░▀░ █▀▀▄ █▀▀▀   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
+  // ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
+  // ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
+
+  haString(ha) {
+    if(ha.name && !this.validString(ha.name)) {
+      return '';
+    }
+    if(ha.isnot && !this.validString(ha.isnot)) {
+      return '';
+    }
+    if(ha.is && !this.validString(ha.is)) {
+      return '';
+    }
+    if(!ha.or) {
+      return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
+    }
+    return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`} OR ${this.haString(ha.or)}`;
+  }
+
+  whString(db, table, wh) {
+    if(wh.is && !this.validString(wh.is)) return '';
+    if(wh.isnot && !this.validString(wh.isnot)) return '';
+    if(!wh.or) {
+      return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`}`;
+    }
+    return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`} OR ${this.whString(db, table, wh.or)}`;
+  }
+
+  fnString(db, table, fn, args) {
+    if(!this.validString(fn)) return '';
+    return `${fn}(${args.map(arg => {
+      if(arg.name) {
+        return `${db}.${table}.${arg.name}`; 
+      }
+      if(arg.number && typeof arg.number === 'number') {
+        return `${arg.number}`; 
+      } else if(arg.number) {
+        this.errors(arg.number + ' in fn object is not a number type');
+      }
+      if(arg.string && this.validString(arg.string)) {
+        return `'${arg.string}'`;
+      }
+      if(arg.fn) {
+        return this.fnString(db, table, arg.fn, arg.args);
+      }
+    }).join()})`
+  }
+  
+  // █▀▀▄ █░░█ ░▀░ █░░ █▀▀▄ █▀▀ █▀▀█ █▀▀
+  // █▀▀▄ █░░█ ▀█▀ █░░ █░░█ █▀▀ █▄▄▀ ▀▀█
+  // ▀▀▀░ ░▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀▀▀ ▀░▀▀ ▀▀▀
+
+  buildSelect() {
+    let select = '';
+    if(this.select.length > 0) {
+      select = `SELECT ${this.select.map(selStr => selStr).join()}`;
+    }
+
+    let from = `FROM ${this.from.db}.${this.from.table}`;
+
+    let join = '';
+    if(this.join.length > 0) {
+      join = `${this.join.map(jStr => `LEFT JOIN ${jStr}`).join(' ')}`;
+    }
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    }
+
+    let having = '';
+    if(this.having.length > 0) {
+      having = `HAVING ${this.having.map(haStr => `(${haStr})`).join(' AND ')}`;
+    }
+
+    let orderBy = ''
+    if(this.orderBy.length > 0) {
+      orderBy =  `ORDER BY ${this.orderBy}`;
+    }
+
+    let ascOrDesc = ''
+    if(this.ascOrDesc.length > 0) {
+      ascOrDesc = this.ascOrDesc;
+    }
+
+    let limit = '';
+    if(this.limit.length > 0) {
+      limit = `LIMIT ${this.limit.map(num => num).join()}`
+    }
+
+    return `${select} ${from} ${join} ${where} ${having} ${orderBy} ${ascOrDesc} ${limit}`;
+
+  }
+
+  buildCreate() {
+    let from = `INSERT INTO ${this.from.db}.${this.from.table}`;
     
+    let columns = '';
+    if(this.columns.length > 0) {
+      columns = `(${this.columns.join()})`;
+    }
+    
+    let values = '';
+    if(this.values.length > 0) {
+      values = `VALUES (${this.values.join()})`;
+    }
+
+    return `${from} ${columns} ${values}`;
   }
 
-  handleExtract(db, table, columns) {
-    const colsWithExtract = (columns || []).filter(col => col.jsonExtract);
-    if(colsWithExtract.length === 0) return;
+  buildUpdate() {
+    let from = `UPDATE ${this.from.db}.${this.from.table}`;
 
-    colsWithExtract.forEach((col,i) => {
-      if(this.invalid(col.as)) return;
-      if(!this.schema[db][table][col.name]) {
-        this.errors.push('Column name \'' + col.name + '\' not found in schema');
-        return;
-      }
-      if(this.schema[db][table][col.name].type !== 'json') {
-        this.errors.push(col.name + ' is not a \'json\' type field')
-        return;
-      }
-      const selection = `JSON_EXTRACT(
-        JSON_EXTRACT(
-          ${db}.${table}.${col.name}, concat('$[', substr(JSON_SEARCH(${db}.${table}.${col.name}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')
-        ), '$.${col.jsonExtract.target}'
-      )`;
+    let set = '';
+    if(this.columns.length === this.values.length && this.columns.length > 0 && this.values.length > 0) {
+      set = `SET ${this.columns.map((col, i) => `${col} = ${this.values[i]}`).join()}`;
+    }
 
-      this.selectOne(selection, col);
-      
-    })
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    } else if(!this.affectAll) {
+      this.fatalError = true;
+      this.errors.push('No where clause provided. If you want to update all records then add `affectAll: true` to your queryObject')
+    }
+
+    let having = '';
+    if(this.having.length > 0) {
+      having = `HAVING ${this.having.map(haStr => `(${haStr})`).join(' AND ')}`;
+    }
+
+    return `${from} ${set} ${where} ${having}`;
+  }
+
+  buildDelete() {
+    let from = `DELETE FROM ${this.from.db}.${this.from.table}`;
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    } else if(!this.affectAll) {
+      this.fatalError = true;
+      this.errors.push('No where clause provided. If you want to delete all records then add `affectAll: true` to your queryObject')
+    }
+
+    return `${from} ${where}`;
   }
 
   // █░░█ ▀▀█▀▀ ░▀░ █░░ ░▀░ ▀▀█▀▀ ░▀░ █▀▀ █▀▀
@@ -511,25 +524,47 @@ module.exports = class jsonQL {
     }
   }
 
-  schemaValid(db, table, column) {
+  // ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
+  // ░█▄█░ █▄▄█ █░░ ▀█▀ █░░█ █▄▄█ ░░█░░ ▀█▀ █░░█ █░░█
+  // ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
 
+  validBySchema(db, table, name) {
+    if(!this.schema) {
+      this.errors.push('A schema must be provided in order to use JsonQL')
+      this.fatalError = true;
+      return;
+    }
+    if(!db || (db || '').length === 0) {
+      this.errors.push('No db name provided');
+      this.fatalError = true;
+      return false;
+    }
     if(!this.schema[db]) {
       this.errors.push(db + ' db not found in schema');
+      this.fatalError = true;
       return false;
     }
-    if(table && !this.schema[db][table]) {
+    if(table && !(this.schema[db] || {})[table]) {
       this.errors.push(db + '.' + table + ' not found in schema');
+      this.fatalError = true;
       return false;
     }
-    if(column && !this.schema[db][table][column]) {
-      this.errors.push(column + ' not found in schema');
+    if(name && !((this.schema[db] || {})[table] || {})[name]) {
+      this.errors.push(db + '.' + table + '.' + name + ' not found in schema');
       return false;
     }
     return true
   }
 
-  invalid(string) {
+  validString(string) {
     const regex = /(drop )|;|(update )( truncate)/gi;
-    return regex.test(string);
+    if(regex.test(string)) {
+      this.errors.push('The string \'' + string + '\' is not allowed');
+      this.fatalError = true;
+      return false;
+    } else {
+      return true;
+    }
   }
+
 }

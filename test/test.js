@@ -31,13 +31,11 @@ async function main() {
         as: 'bookingMonth',
         jsonExtract: {search: 'Booking Month', target: 'value'}
       },
-      // {
-      //   format: {
-      //     fn: 'REPLACE',
-      //     args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}]
-      //   },
-      //   as: 'bookingNameFormatted'
-      // },
+      {
+        fn: 'REPLACE',
+        args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}],
+        as: 'bookingNameFormatted'
+      },
     ],
     limit: [0,5]
   });
