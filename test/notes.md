@@ -42,11 +42,14 @@ const WhereObject = {
   to the schema.~~
 
 - ~~If no `columns` is given then pass back all columns that exist in the schema.~~
+  - ~~A column is omitted if it has the flag `hidden: true`.~~
 
-- Add update, delete and ~~create~~.
+- Add ~~update~~, ~~delete~~ and ~~create~~.
 
-- Add `jsonExtract` key to the `ColumnObject`.
+- ~~Add `orderBy` key to the `JoinObject`.~~
 
-- Add `orderBy` key to the `JoinObject`.
+- ~~Add `jsonExtract` key to the `ColumnObject`.~~
 
 - Add an primary auto increment key to the schema.
+
+

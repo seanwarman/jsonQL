@@ -1,7 +1,7 @@
 const mysql = require('mysql2/promise');
-const connection = require('../config/connection');
+const connection = require('./config');
 const schema = require('../../bms-api/general/schema/admin');
-const JsonQL = require('../');
+const JsonQL = require('./test2');
 
 async function main() {
 
@@ -19,14 +19,12 @@ async function main() {
         table: 'users',
         columns: [
           {
-            format: {
-              fn: 'CONCAT',
-              args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}]
-            },
+            fn: 'CONCAT',
+            args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
             as: 'fullName'
           }
         ],
-        where: {name: 'createdUserKey', is: 'userKey'}
+        where: [{name: 'createdUserKey', is: 'userKey'}]
       }},
       {
         name: 'jsonForm',

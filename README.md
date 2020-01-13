@@ -25,15 +25,15 @@ Which get's parsed as the following once it reaches MYSQL...
 
 ```sql
 SELECT
-`bookingName`,
-`bookingsKey`,
-`assignedUserKey`
+bms_campaigns.bookings.bookingName,
+bms_campaigns.bookings.bookingsKey,
+bms_campaigns.bookings.assignedUserKey
 
 FROM
 bms_campaigns.bookings
 
 WHERE
-`createdUserKey` = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
+bms_campaigns.bookings.createdUserKey = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
 ```
 
 So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it to replace
@@ -44,6 +44,7 @@ hundreds of potential endpoints.
 ### Where
 
 You'll notice `where` is an array. That's so we can add extra ones for multiple ANDs.
+For an OR we can nest `where` type objects inside themselves using the `or` param.
 
 ```js
 {
@@ -63,6 +64,14 @@ You'll notice `where` is an array. That's so we can add extra ones for multiple 
       {
         name: 'bookingsKey',
         is: 'd03563a1-2e2c-11ea-b3ec-a1387ad1100d',
+        or: {
+          name: 'bookingsKey',
+          is: '123',
+          or: {
+            name: 'bookingsKey',
+            is: '321'
+          }
+        }
       }
     ]
   },
@@ -87,7 +96,7 @@ JOINs can be added as part of the `columns` array...
       columns: [
         {name: 'partnerName'}
       ],
-      where: {name: 'createdPartnerKey', is: 'partnerKey'},
+      where: [{name: 'createdPartnerKey', is: 'partnerKey'}],
     }},
   ],
 }
@@ -207,9 +216,6 @@ let data = {
 jsonQL.updateQL({
   db: 'bms_campaigns',
   table: 'bookings',
-  data: {
-    bookingName: 'Mega Cool Booking!',
-  },
   where: [
     {
       name: 'bookingsKey',
@@ -231,7 +237,8 @@ The structure of your schema object should look like:
   databaseName: {
     tableName1: {
       column1: {
-        type: 'string'
+        type: 'string',
+        hidden: true
       },
       column2: {
         type: 'string'
@@ -249,11 +256,65 @@ The structure of your schema object should look like:
 }
 ```
 
-Any columns not included in the schema will be automatically omitted from your queries. Any
-databases or tables not included will break **jsonQL** if you then try to query them.
+Any columns not included in the schema will be automatically omitted from your queries.
+Any columns with the `hidden` flag will only be retrieved if you specifically specify them in the `columns` array.
+Any databases or tables not included will break **jsonQL** if you then try to query them.
 
-## Json Extract
-To do a JSON_EXTRACT function on a json column you can search for the object with your value
+## Fn (Functions)
+
+To use slq functions you can use the fn String.
+
+```js
+columns: [
+  {
+    fn: 'REPLACE',
+    args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}],
+    as: 'bookingNameFormatted'
+  },
+],
+```
+
+This will also work with REPLACE and many other slq functions.
+You can also put `fn` into a `join`.
+
+```js
+{join: {
+  db: 'Biggly',
+  table: 'users',
+  columns: [
+    {
+      fn: 'CONCAT',
+      args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
+      as: 'fullName'
+    }
+  ],
+  where: {name: 'createdUserKey', is: 'userKey'}
+}},
+```
+
+You can even nest any number of `fn`s inside one-another.
+
+```js
+columns: [
+  {
+    fn: 'REPLACE',
+    args: [
+      {
+        fn: 'REPLACE',
+        args: [
+          {string: '%2F'},
+          {string: '/'},
+        ]
+      }, 
+      {string: '%20'}, 
+      {name: ' '}],
+    as: 'fullName'
+  }
+],
+```
+
+## JsonExtract
+To do a `JSON_EXTRACT` function with a `JSON_SEARCH` on a json column you can search for the object with your value
 using `jsonExtract` in the `columns` array:
 
 ```js
@@ -284,38 +345,55 @@ So if a `jsonForm` column in the db looks like:
 The 'Booking Month' `search` will return the first object in this array and
 the `target` of `value` will return 'December'.
 
-## Format
 
-To use slq functions you can use the format object.
+# JsonQL Format In Depth
+**JsonQL** interacts with three different types of object.
+
+### JoinObject                           
+
+The `JoinObject` is the top level object, you always start here. 
+When at the top level `db` and `table` select the main table you want to retrieve from but
+the same format object can also be used inside a `ColumnObject` to create table joins.    
 
 ```js
-columns: [
-  {
-    format: {
-      fn: 'REPLACE',
-      args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}]
-    },
-    as: 'bookingNameFormatted'
-  },
-],
+const JoinObject = {
+  db: String,
+  table: String,
+  columns: [ColumnObject],
+  where: [WhereObject],
+  having: [WhereObject],
+  limit: [Number, Number],
+  orderBy: {name: String, desc: Boolean},
+}
 ```
 
-This will also work with REPLACE and many other slq functions.
-You can also put `format` into a `join`.
+### ColumnObject                         
+
+The `ColumnObject` goes inside the `columns` param of a `JoinObject`. But as you can see
+it can also be an item in it's own `args` array and you can also add a `JoinObject` to `join`.  
+
+This works because JsonQL is totally recursive meaning you can put a `ColumnObject` inside another
+`ColumnObject` and keep going down until you break javascript completely.
 
 ```js
-{join: {
-  db: 'Biggly',
-  table: 'users',
-  columns: [
-    {
-      format: {
-        fn: 'CONCAT',
-        args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}]
-      },
-      as: 'fullName'
-    }
-  ],
-  where: {name: 'createdUserKey', is: 'userKey'}
-}},
+const ColumnObject = {
+  name: String,
+  string: String,
+  number: Number,
+  join: JoinObject,
+  fn: String,
+  args: [ColumnObject],
+  as: String
+}
+```
+
+### WhereObject
+              
+```js
+const WhereObject = {
+  name: String,
+  is: String,
+  isnot: String,
+  or: WhereObject
+}
 ```

@@ -1,31 +1,29 @@
-const mysql = require('mysql2/promise');
-const connection = require('./config');
-const schema = require('../../bms-api/general/schema/admin');
-
-class JsonQL {
+module.exports = class JsonQL {
   constructor(schema) {
     this.schema = schema;
     this.errors = [];
     this.fatalError = false;
     this.joinTables = [];
+    this.all = false;
 
     this.select = [];
     this.from = {db: '', table: ''};
     this.join = [];
     this.having = [];
     this.where = [];
+    this.limit = [];
     this.columns = [];
     this.values = [];
-
-    this.selectDefaultCols = false;
+    this.orderBy = '';
+    this.ascOrDesc = '';
   }
 
-  // █▀▀ █▀▀ █░░ █▀▀ █▀▀ ▀▀█▀▀
-  // ▀▀█ █▀▀ █░░ █▀▀ █░░ ░░█░░
-  // ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░
+  // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
+  // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
+  // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
 
-  selectQL({db, table, columns, where, having, limit}) {
-    this.parseJson({db, table, columns, where, having, limit})
+  selectQL({db, table, columns, where, having, limit, orderBy}) {
+    this.initJsonQL({db, table, columns, where, having, limit, orderBy})
 
     const selectString = this.buildSelect();
 
@@ -45,7 +43,12 @@ class JsonQL {
   }
 
   createQL({db, table, columns, where, having, limit}, data) {
-    this.parseJson({db, table, columns, where, having, limit}, data)
+    if(!data) {
+      this.errors.push('Data must be provided in a createQL');
+      this.fatalError = true;
+    }
+
+    this.initJsonQL({db, table, columns, where, having, limit}, data)
 
     const selectString = this.buildCreate();
 
@@ -64,11 +67,56 @@ class JsonQL {
     }
   }
 
-  // █▀▀█ █▀▀█ █▀▀█ █▀▀ █▀▀ █▀▀█ █▀▀
-  // █░░█ █▄▄█ █▄▄▀ ▀▀█ █▀▀ █▄▄▀ ▀▀█
-  // █▀▀▀ ▀░░▀ ▀░▀▀ ▀▀▀ ▀▀▀ ▀░▀▀ ▀▀▀
+  updateQL({db, table, columns, where, having, limit, affectAll}, data) {
+    if(!data) {
+      this.errors.push('Data must be provided in a updateQL');
+      this.fatalError = true;
+    }
 
-  parseJson({db, table, columns, where, having, limit}, data) {
+    this.initJsonQL({db, table, columns, where, having, limit, affectAll}, data)
+
+    const selectString = this.buildUpdate();
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
+  }
+
+  deleteQL({db, table, columns, where, having, limit, affectAll}) {
+    this.initJsonQL({db, table, columns, where, having, limit, affectAll})
+
+    const selectString = this.buildDelete();
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        query: selectString,
+        errors: this.errors
+      }
+    }
+
+    return {
+      status: 'success',
+      query: selectString,
+      errors: this.errors,
+    }
+  }
+
+  // █▀▀ █▀▀▄ ▀▀█▀▀ █▀▀█ █░░█ █▀▀█ █▀▀█ ░▀░ █▀▀▄ ▀▀█▀▀
+  // █▀▀ █░░█ ░░█░░ █▄▄▀ █▄▄█ █░░█ █░░█ ▀█▀ █░░█ ░░█░░
+  // ▀▀▀ ▀░░▀ ░░▀░░ ▀░▀▀ ▄▄▄█ █▀▀▀ ▀▀▀▀ ▀▀▀ ▀░░▀ ░░▀░░
+
+  initJsonQL({db, table, columns, where, having, limit, orderBy, affectAll}, data) {
     if(this.validBySchema(db, table)) {
       this.from = {db, table};
     } else {
@@ -76,24 +124,25 @@ class JsonQL {
       return;
     }
 
-    if(columns.filter(col => col.name).length === 0) {
-      this.selectDefaultCols = true;
+    if(affectAll) {
+      this.affectAll = affectAll;
     }
 
     if(data) {
-      this.parseData(
-        db,
-        table,
-        data
-      )
+      this.parseData(db, table, data)
     }
 
     if(columns && (columns || []).length > 0) {
-      this.parseCols(
+      this.pushCols(
         {dbName: db, dbAlias: db},
         {tableName: table, tableAlias: table}, 
         columns
       );
+    }
+
+    // If there's no selections then get all non-hidden columns from the schema
+    if(this.select.length === 0) {
+      this.pushSelFromSchema(db, table);
     }
 
     if(where && (where || []).length > 0) {
@@ -108,10 +157,22 @@ class JsonQL {
       this.pushHaving(having);
     }
 
+    if(orderBy) {
+      this.pushOrderBy(
+        db,
+        table,
+        orderBy
+      );
+    }
+
     if(limit) {
       this.limit = limit;
     }
   }
+
+  // █▀▀▄ █▀▀█ ▀▀█▀▀ █▀▀█
+  // █░░█ █▄▄█ ░░█░░ █▄▄█
+  // ▀▀▀░ ▀░░▀ ░░▀░░ ▀░░▀
 
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
@@ -128,7 +189,26 @@ class JsonQL {
     })
   }
 
-  parseCols(dbObj, tableObj, columns) {
+  // █▀▀█ █░░█ █▀▀ █░░█   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
+  // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
+  // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
+
+  pushOrderBy(db, table, orderBy) {
+    if(!this.validBySchema(db, table, orderBy.name)) {
+      return;
+    }
+    this.orderBy = orderBy.name;
+
+
+    if(orderBy.desc && typeof orderBy.desc !== 'boolean') {
+      this.errors.push('orderBy.desc must be a Boolean type value.')
+      return;
+    }
+    this.ascOrDesc = orderBy.desc ? 'DESC' : 'ASC';
+    
+  }
+
+  pushCols(dbObj, tableObj, columns) {
     if(!this.validBySchema(dbObj.dbName, tableObj.tableName)) {
       return;
     }
@@ -162,10 +242,15 @@ class JsonQL {
     }
 
   }
-
-  // █▀▀█ █░░█ █▀▀ █░░█   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
-  // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
-  // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
+  
+  pushSelFromSchema(db ,table) {
+    const fromTable = this.schema[db][table];
+    return `${Object.keys(fromTable).filter(key => (
+      fromTable[key].hidden !== true
+    )).forEach(key => {
+      this.select.push(`${db}.${table}.${key}`);
+    })}`
+  }
 
   pushNameCols(dbObj, tableObj, nameCols) {
     nameCols.forEach(col => {
@@ -181,10 +266,12 @@ class JsonQL {
       if(col.string && this.validString(col.string)) {
         selectStr = `'${col.string}'`;
       }
+      if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
+        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
+      }
       if(col.as && this.validString(col.as)) {
         selectStr += ` AS ${col.as}`;
       }
-
       if(selectStr.length > 0) {
         this.select.push(selectStr);
       }
@@ -221,7 +308,7 @@ class JsonQL {
         this.join.push(joinStr);
       }
 
-      this.parseCols(
+      this.pushCols(
         {dbName: col.join.db, dbAlias: col.join.db},
         {tableName: col.join.table, tableAlias: aliasTableName},
         col.join.columns
@@ -320,46 +407,15 @@ class JsonQL {
       }
     }).join()})`
   }
-
-  selStrFromSchema() {
-    const fromTable = this.schema[this.from.db][this.from.table];
-    return `${Object.keys(fromTable).filter(key => (
-      fromTable[key].hidden !== true
-    )).map(key => (
-      `${this.from.db}.${this.from.table}.${key}`
-    )).join()}`
-  }
-
+  
   // █▀▀▄ █░░█ ░▀░ █░░ █▀▀▄ █▀▀ █▀▀█ █▀▀
   // █▀▀▄ █░░█ ▀█▀ █░░ █░░█ █▀▀ █▄▄▀ ▀▀█
   // ▀▀▀░ ░▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀▀▀ ▀░▀▀ ▀▀▀
-
-  buildCreate() {
-    let from = `INSERT INTO ${this.from.db}.${this.from.table}`;
-    
-    let columns = '';
-    if(this.columns.length > 0) {
-      columns = `(${this.columns.join()})`;
-    }
-    
-    let values = '';
-    if(this.values.length > 0) {
-      values = `VALUES (${this.values.join()})`;
-    }
-
-    return `${from} ${columns} ${values}`;
-  }
 
   buildSelect() {
     let select = '';
     if(this.select.length > 0) {
       select = `SELECT ${this.select.map(selStr => selStr).join()}`;
-    }
-
-    // If there's no columns or joins included in the jsonQuery return all columns in
-    // the schema that don't have the `hidden` flag.
-    if(this.selectDefaultCols && select.length === 0) {
-      select = `SELECT ${this.selStrFromSchema()}`
     }
 
     let from = `FROM ${this.from.db}.${this.from.table}`;
@@ -379,13 +435,77 @@ class JsonQL {
       having = `HAVING ${this.having.map(haStr => `(${haStr})`).join(' AND ')}`;
     }
 
+    let orderBy = ''
+    if(this.orderBy.length > 0) {
+      orderBy =  `ORDER BY ${this.orderBy}`;
+    }
+
+    let ascOrDesc = ''
+    if(this.ascOrDesc.length > 0) {
+      ascOrDesc = this.ascOrDesc;
+    }
+
     let limit = '';
     if(this.limit.length > 0) {
       limit = `LIMIT ${this.limit.map(num => num).join()}`
     }
 
-    return `${select} ${from} ${join} ${where} ${having} ${limit}`;
+    return `${select} ${from} ${join} ${where} ${having} ${orderBy} ${ascOrDesc} ${limit}`;
 
+  }
+
+  buildCreate() {
+    let from = `INSERT INTO ${this.from.db}.${this.from.table}`;
+    
+    let columns = '';
+    if(this.columns.length > 0) {
+      columns = `(${this.columns.join()})`;
+    }
+    
+    let values = '';
+    if(this.values.length > 0) {
+      values = `VALUES (${this.values.join()})`;
+    }
+
+    return `${from} ${columns} ${values}`;
+  }
+
+  buildUpdate() {
+    let from = `UPDATE ${this.from.db}.${this.from.table}`;
+
+    let set = '';
+    if(this.columns.length === this.values.length && this.columns.length > 0 && this.values.length > 0) {
+      set = `SET ${this.columns.map((col, i) => `${col} = ${this.values[i]}`).join()}`;
+    }
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    } else if(!this.affectAll) {
+      this.fatalError = true;
+      this.errors.push('No where clause provided. If you want to update all records then add `affectAll: true` to your queryObject')
+    }
+
+    let having = '';
+    if(this.having.length > 0) {
+      having = `HAVING ${this.having.map(haStr => `(${haStr})`).join(' AND ')}`;
+    }
+
+    return `${from} ${set} ${where} ${having}`;
+  }
+
+  buildDelete() {
+    let from = `DELETE FROM ${this.from.db}.${this.from.table}`;
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = `WHERE ${this.where.map(whStr => `(${whStr})`).join(' AND ')}`;
+    } else if(!this.affectAll) {
+      this.fatalError = true;
+      this.errors.push('No where clause provided. If you want to delete all records then add `affectAll: true` to your queryObject')
+    }
+
+    return `${from} ${where}`;
   }
 
   // █░░█ ▀▀█▀▀ ░▀░ █░░ ░▀░ ▀▀█▀▀ ░▀░ █▀▀ █▀▀
@@ -409,6 +529,11 @@ class JsonQL {
   // ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
 
   validBySchema(db, table, name) {
+    if(!this.schema) {
+      this.errors.push('A schema must be provided in order to use JsonQL')
+      this.fatalError = true;
+      return;
+    }
     if(!db || (db || '').length === 0) {
       this.errors.push('No db name provided');
       this.fatalError = true;
@@ -443,79 +568,3 @@ class JsonQL {
   }
 
 }
-
-const main = async() => {
-
-  const ql = new JsonQL(schema);
-
-  const queryOb = ql.selectQL({
-    db: 'bms_booking',
-    table: 'bookings',
-    columns: [
-      {name: 'bookingName'},
-      {name: 'bookingsKey'},
-      {join: {
-        db: 'Biggly',
-        table: 'users',
-        columns: [
-          {
-            fn: 'CONCAT',
-            args: [
-              {name: 'firstName'},
-              {string: ' '},
-              {name: 'lastName'},
-            ],
-            as: 'createdName'
-          }
-        ],
-        where: [{name: 'createdUserKey', is: 'userKey'}]
-      }},
-      {join: {
-        db: 'Biggly',
-        table: 'users',
-        columns: [
-          {
-            fn: 'CONCAT',
-            args: [
-              {name: 'firstName'},
-              {string: ' '},
-              {name: 'lastName'},
-            ],
-            as: 'assignedName'
-          }
-        ],
-        where: [{name: 'assignedUserKey', is: 'userKey'}]
-      }}
-    ],
-    where: [{name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'}],
-    having: [
-      {name: 'createdName', is: 'Carl Williams'}
-    ],
-    limit: [0,5]
-  });
-
-  if(queryOb.status === 'error') {
-    console.log(queryOb);
-    return;
-  }
-
-  console.log(queryOb);
-  // return;
-
-  const con = await mysql.createConnection(connection);
-
-  let result;
-
-  try {
-    result = await con.query(queryOb.query);
-  } catch (error) {
-    console.log('error :', error);
-    con.close();
-  }
-
-  con.close();
-
-  console.log('result :', result[0]);
-}
-
-main();
