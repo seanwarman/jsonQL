@@ -276,21 +276,27 @@ columns: [
 ```
 
 This will also work with REPLACE and many other slq functions.
-You can also put `fn` into a `join`.
+You can also put an `fn` into a `join`.
 
 ```js
-{join: {
-  db: 'Biggly',
-  table: 'users',
+{
+  db: 'bms_booking',
+  table: 'bookings',
   columns: [
-    {
-      fn: 'CONCAT',
-      args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
-      as: 'fullName'
-    }
-  ],
-  where: {name: 'createdUserKey', is: 'userKey'}
-}},
+    {join: {
+      db: 'Biggly',
+      table: 'users',
+      columns: [
+        {
+          fn: 'CONCAT',
+          args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
+          as: 'fullName'
+        }
+      ],
+      where: {name: 'createdUserKey', is: 'userKey'}
+    }},
+  ]
+}
 ```
 
 You can even nest any number of `fn`s inside one-another.
@@ -308,11 +314,15 @@ columns: [
         ]
       }, 
       {string: '%20'}, 
-      {name: ' '}],
+      {string: ' '}
+    ],
     as: 'fullName'
   }
 ],
 ```
+
+Using `name` in a column or args object will target a column name from your db. If
+you want to put an actual string in then use the `string` param instead.
 
 ## JsonExtract
 To do a `JSON_EXTRACT` function with a `JSON_SEARCH` on a json column you can search for the object with your value
