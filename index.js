@@ -213,7 +213,7 @@ module.exports = class JsonQL {
       return;
     }
 
-    const nameCols = columns.filter(col => col.name || col.number || col.string);
+    const nameCols = columns.filter(col => col.name || col.number || col.string || col.count);
     const joinCols = columns.filter(col => col.join);
     const fnCols = columns.filter(col => col.fn);
 
@@ -268,6 +268,9 @@ module.exports = class JsonQL {
       }
       if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
         selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
+      }
+      if(col.count) {
+        selectStr += this.countString(dbObj.dbName, tableObj.tableName, col.count);
       }
       if(col.as && this.validString(col.as)) {
         selectStr += ` AS ${col.as}`;
@@ -363,6 +366,11 @@ module.exports = class JsonQL {
   // ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
   // ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
 
+  countString(db, table, count) {
+    let whereStr = count.where.map(wh => this.countWhString(db, table, count.db, count.table, wh)).join();
+    return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
+  }
+
   haString(ha) {
     if(ha.name && !this.validString(ha.name)) {
       return '';
@@ -377,6 +385,15 @@ module.exports = class JsonQL {
       return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
     }
     return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`} OR ${this.haString(ha.or)}`;
+  }
+
+  countWhString(inDb, inTable, whDb, whTable, wh) {
+    if(wh.is && !this.validString(wh.is)) return '';
+    if(wh.isnot && !this.validString(wh.isnot)) return '';
+    if(!wh.or) {
+      return `${whDb}.${whTable}.${wh.name} ${wh.is ? `= ${inDb}.${inTable}.${wh.is}` : `!= ${inDb}.${inTable}.${wh.isnot}`}`;
+    }
+    return `${whDb}.${whTable}.${wh.name} ${wh.is ? `= ${inDb}.${inTable}.${wh.is}` : `!= ${inDb}.${inTable}.${wh.isnot}`} OR ${this.countWhString(inDb, inTable, whDb, whTable, wh.or)}`;
   }
 
   whString(db, table, wh) {

@@ -9,12 +9,25 @@ async function main() {
   const jsonQL = new JsonQL(schema);
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
-  let queryObj = jsonQL.updateQL({
-    db: 'bms_campaigns',
+  let queryObj = jsonQL.selectQL({
+    db: 'bms_booking',
     table: 'bookings',
-    where: [{name: 'bookingName', is: '1'}]
-  }, {
-    bookingName: 'BOOM'
+    columns: [
+      {
+        count: {
+          db: 'Biggly',
+          table: 'uploads',
+          where: [{name: 'bookingsKey', is: 'bookingsKey'}]
+        },
+        as: 'uploadsCount'
+      },
+      {name: 'bookingName'},
+      {name: 'colorLabel'},
+      {name: 'bookingDivKey'},
+    ],
+    having: [{name: 'uploadsCount', is: '2'}],
+    // where: [{name: 'bookingName', is: '1'}]
+    limit: [0,3]
   });
 
   console.log('queryObj :', queryObj);

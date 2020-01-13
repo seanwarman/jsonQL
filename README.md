@@ -118,15 +118,16 @@ bms_booking.bookings
 LEFT JOIN Biggly.partners ON Biggly.partners.createdPartnerKey = bms_booking.bookings.partnerKey
 ```
 
-If you've had any experience with [https://serverless.com/](serverless) lambda functions
+If you've had any experience with [serverless](https://serverless.com/) lambda functions
 you'll know that if you want more than about 20 endpoints in a project, things start to
 get pretty funky (the bad kind).
 
-Lots of devs have turned to [https://graphql.org/](GraphQL) for this very reason but for
+Lots of devs have turned to [GraphQL](https://graphql.org/) for this very reason but for
 my particular needs I thought GraphQL was a bit overkill.
 
-**jsonQL** is light, safe and fast because all it does is build mysql query strings. This means 
+**JsonQL** is light and fast because all it does is build mysql query strings. This means 
 it can easily be added to your project without disrupting whatever structure you've already built.
+It also works with a schema so it's safe as well.
 
 ## Node usage
 
@@ -345,8 +346,38 @@ So if a `jsonForm` column in the db looks like:
 The 'Booking Month' `search` will return the first object in this array and
 the `target` of `value` will return 'December'.
 
+## Count
 
-# JsonQL Format In Depth
+The `count` param in the `ColumnsObject` can be used to count associated records
+from another table by any matching column value.
+
+```js
+{
+  db: 'bms_booking',
+  table: 'bookings',
+  columns: [
+    {name: 'bookingName'},
+    {name: 'colorLabel'},
+    {name: 'bookingDivKey'},
+    {
+      count: {
+        db: 'Biggly',
+        table: 'uploads',
+        where: [{name: 'bookingsKey', is: 'bookingsKey'}]
+      },
+      as: 'uploadsCount'
+    },
+  ],
+  having: [{name: 'uploadsCount', is: '2'}],
+}
+```
+
+Because `uploadsCount` doesn't really exist in our database the `where` object
+won't work as our lookup condition so instead we can use `having`, which is able
+to look up alias column names (or anything we name under an `as` value).
+
+# JsonQL API
+
 **JsonQL** interacts with three different types of object.
 
 ### JoinObject                           
@@ -372,8 +403,8 @@ const JoinObject = {
 The `ColumnObject` goes inside the `columns` param of a `JoinObject`. But as you can see
 it can also be an item in it's own `args` array and you can also add a `JoinObject` to `join`.  
 
-This works because JsonQL is totally recursive meaning you can put a `ColumnObject` inside another
-`ColumnObject` and keep going down until you break javascript completely.
+This works because JsonQL is recursive. You can put a `ColumnObject` inside another
+`ColumnObject` and keep going down until you break your computer.
 
 ```js
 const ColumnObject = {
@@ -381,8 +412,10 @@ const ColumnObject = {
   string: String,
   number: Number,
   join: JoinObject,
+  count: JoinObject,
   fn: String,
   args: [ColumnObject],
+  jsonExtract: {search: String, target: String},
   as: String
 }
 ```
