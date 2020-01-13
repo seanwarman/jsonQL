@@ -309,6 +309,7 @@ columns: [
       {
         fn: 'REPLACE',
         args: [
+          {name: 'bookingName'},
           {string: '%2F'},
           {string: '/'},
         ]
