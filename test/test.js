@@ -10,11 +10,11 @@ async function main() {
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
   let queryObj = jsonQL.updateQL({
-    db: 'bms_campaigns',
+    db: 'bms_booking',
     table: 'bookings',
-    where: [{name: 'bookingName', is: '1'}]
+    where: [{name: 'bookingsKey', is: '67fe209d-fbde-11e9-96d8-69859465d135'}]
   }, {
-    bookingName: 'BOOM'
+    customerKey: '1e4e5880-7311-11e9-b7cf-850694c11c0f95'
   });
 
   console.log('queryObj :', queryObj);

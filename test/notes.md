@@ -50,6 +50,24 @@ const WhereObject = {
 
 - ~~Add `jsonExtract` key to the `ColumnObject`.~~
 
+- If a data key has a $ at the front it means we're doing a JSON_REPLACE value.
+
+```js
+"$jsonForm[@Booking Month].value": 'Boom';
+
+
+const data = {
+  assignedUserKey: '1234',
+  jsonForm: jsonForm,
+  "$jsonForm[?Booking Month].value": 6
+}
+```
+
+which would render in the sql as: 
+```sql
+jsonForm = JSON_REPLACE(jsonForm, CONCAT('$[', SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Booking Month'), 4, 1), '].value'), '6')
+```
+
 - Add a COUNT to the SELECTs like in the bookings get.
 
 - Add an primary auto increment key to the schema.
