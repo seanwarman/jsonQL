@@ -176,6 +176,11 @@ module.exports = class JsonQL {
 
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
+      if(this.keyIsQuery(key)) {
+        this.pushQuery(db, table, key, data[key]);
+        return;
+      }
+
       if(!this.validBySchema(db, table, key)) return;
 
       if(typeof data[key] === 'number') {
@@ -192,6 +197,37 @@ module.exports = class JsonQL {
   // █▀▀█ █░░█ █▀▀ █░░█   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
   // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
   // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
+
+  pushQuery(db, table, key, value) {
+    // let key = '$jsonForm[?Booking Month].value';
+
+    let column = key.slice(1, key.indexOf('['));
+
+    if(!this.validBySchema(db, table, column)) return;
+
+    let index = key.slice(key.indexOf('[') + 1, key.indexOf(']'));
+    let startBracket = '$[';
+    let endBracket = key.slice(key.indexOf(']'), key.length);
+    if(/^\?/.test(index)) {
+      // remove the ? from the search term index.
+      index = index.slice(1, index.length);
+      index = `CONCAT('${startBracket}', SUBSTR(JSON_SEARCH(${column}, 'one', '${index}'), 4, 1), '${endBracket}')`
+      console.log(index);
+    } else {
+      // put the brackets back for the query.
+      index = `'${startBracket}${index}${endBracket}'`;
+    }
+    if(typeof value === 'string') {
+      value = `'${value}'`;
+    }
+
+    value = `JSON_REPLACE(${column}, ${index}, ${value})`;
+
+    this.columns.push(`${column}`);
+    this.values.push(value);
+    // jsonForm = JSON_REPLACE(jsonForm, CONCAT('$[', SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Booking Month'), 4, 1), '].value'), 6)
+
+  }
 
   pushOrderBy(db, table, orderBy) {
     if(!this.validBySchema(db, table, orderBy.name)) {
@@ -522,6 +558,10 @@ module.exports = class JsonQL {
       this.joinTables.push(table);
       return table;
     }
+  }
+
+  keyIsQuery(key) {
+    return /^\$/.test(key); 
   }
 
   // ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
