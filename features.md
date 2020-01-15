@@ -13,12 +13,6 @@ A `count` option.
 }
 ```
 
-Make the `join` `where` into an array like the top level `where`.
-
-```js
-where: [{name: 'bookingsKey', is: '123'}]
-```
-
 The `jsonExtract` needs to accept and `index` with and without a
 `target`.
 

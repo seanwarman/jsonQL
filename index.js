@@ -176,6 +176,11 @@ module.exports = class JsonQL {
 
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
+      if(this.keyIsQuery(key)) {
+        this.pushQuery(db, table, key, data[key]);
+        return;
+      }
+
       if(!this.validBySchema(db, table, key)) return;
 
       if(typeof data[key] === 'number') {
@@ -192,6 +197,34 @@ module.exports = class JsonQL {
   // █▀▀█ █░░█ █▀▀ █░░█   █▀▀ █░░█ █▀▀▄ █▀▀ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄ █▀▀
   // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
   // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
+
+  pushQuery(db, table, key, value) {
+    // let key = '$jsonForm[?Booking Month].value';
+
+    let column = this.jColString(db, table, key);
+    let index = this.jInString(db, table, column, key);
+
+    column = `${db}.${table}.${column}`;
+
+    if(typeof value === 'string') {
+      value = `'${value}'`;
+    }
+
+    value = `IF(
+      JSON_SET(${column}, ${index}, ${value}) IS NOT NULL,
+      JSON_SET(${column}, ${index}, ${value}),
+      ${column}
+    )`;
+
+    this.columns.push(`${column}`);
+    this.values.push(value);
+    // IF(
+    //   (JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom') IS NOT NULL),
+    //   JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom'),
+    //   jsonForm
+    // )
+
+  }
 
   pushOrderBy(db, table, orderBy) {
     if(!this.validBySchema(db, table, orderBy.name)) {
@@ -255,7 +288,9 @@ module.exports = class JsonQL {
   pushNameCols(dbObj, tableObj, nameCols) {
     nameCols.forEach(col => {
       let selectStr = '';
-      if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
+      if(col.name && this.keyIsQuery(col.name)) {
+        selectStr = this.jExString(dbObj.dbName, tableObj.tableName, col.name);
+      } else if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
         selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
       }
       if(col.number && typeof col.number === 'number') {
@@ -369,6 +404,39 @@ module.exports = class JsonQL {
   countString(db, table, count) {
     let whereStr = count.where.map(wh => this.countWhString(db, table, count.db, count.table, wh)).join();
     return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
+  }
+  
+  jExString(db, table, jQString) {
+    let column = this.jColString(db, table, jQString);
+    let index = this.jInString(db, table, column, jQString);
+    return `JSON_EXTRACT(${column}, ${index})`;
+  }
+
+  jColString(db, table, jQString) {
+    let column = jQString.slice(1, jQString.indexOf('['));
+    if(!this.validBySchema(db, table, column)) return;
+    return column;
+  }
+
+  jInString(db, table, column, jQString) {
+    if(!this.validBySchema(db, table, column)) return;
+    let index = jQString.slice(jQString.indexOf('[') + 1, jQString.indexOf(']'));
+    let startBracket = '$[';
+    let endBracketAndIfValue = jQString.slice(jQString.indexOf(']'), jQString.length);
+
+    column = `${db}.${table}.${column}`;
+    if(/^\?/.test(index)) {
+      // Remove the ? from the search term index.
+      index = index.slice(1, index.length);
+      index = `CONCAT('${startBracket}',SUBSTR(JSON_SEARCH(${column},'one','${index}'),4,LOCATE(']',JSON_SEARCH(${column},'one','${index}'))-4),'${endBracketAndIfValue}')`;
+      // CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4)
+    } else if(!this.validIndex(index)) {
+      return;
+    } else {
+      // Put the brackets back for the query.
+      index = `'${startBracket}${index}${endBracketAndIfValue}'`;
+    }
+    return index;
   }
 
   haString(ha) {
@@ -541,9 +609,22 @@ module.exports = class JsonQL {
     }
   }
 
+  keyIsQuery(key) {
+    return /^\$/.test(key); 
+  }
+
   // ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
   // ░█▄█░ █▄▄█ █░░ ▀█▀ █░░█ █▄▄█ ░░█░░ ▀█▀ █░░█ █░░█
   // ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
+
+  validIndex(index) {
+    if(Number(index) === NaN) {
+      this.errors.push('The index given to the json selector is not a number, if you\'re trying to search add a ? to the start of your string');
+      this.fatalError = true;
+      return false;
+    }
+    return true;
+  }
 
   validBySchema(db, table, name) {
     if(!this.schema) {
