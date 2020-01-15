@@ -50,17 +50,35 @@ const WhereObject = {
 
 - ~~Add `jsonExtract` key to the `ColumnObject`.~~
 
-- If a data key has a $ at the front it means we're doing a JSON_REPLACE value.
+- ~~If a data key has a $ at the front it means we're doing a JSON_SET value.~~
 
 ```js
 const data = {
-  "$jsonForm[?Booking Month].value": 6
+  "$jsonForm[?Booking Month].value": 'cool month'
 }
+
 ```
 
 which would render in the sql as: 
 ```sql
-jsonForm = JSON_REPLACE(jsonForm, CONCAT('$[', SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Booking Month'), 4, 1), '].value'), 6)
+UPDATE
+bookings
+SET
+jsonForm = IF(
+  (JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm,'one','Bigg Spend'), 4,LOCATE('].',JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'cool month') IS NOT NULL),
+  JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm,'one','Bigg Spend'), 4,LOCATE('].',JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'cool month'),
+  jsonForm
+)
+where
+bookingsKey = 'd03563a0-2e2c-11ea-b3ec-a1387ad1100d'
+```
+
+- Add the $ syntax to the columns objects.
+
+```js
+columns: [
+  {name: '$jsonForm[?Booking Month].value', as: 'bookingMonth'}
+]
 ```
 
 - Add a COUNT to the SELECTs like in the bookings get.

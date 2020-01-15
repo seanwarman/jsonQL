@@ -9,21 +9,25 @@ async function main() {
   const jsonQL = new JsonQL(schema);
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
-  let queryObj = jsonQL.updateQL({
+  let queryObj = jsonQL.selectQL({
     db: 'bms_campaigns',
     table: 'bookings',
-    where: [{name: 'bookingsKey', is: 'd03563a1-2e2c-11ea-b3ec-a1387ad1100d'}]
-  }, {
-    "$jsonForm[?Booking Month].value": 7
+    columns: [
+      {name: 'bookingName', as: 'bookywooky'}
+    ],
+    // where: [{name: 'bookingsKey', is: 'fd6bd940-2e26-11ea-b768-834e18b87afe'}]
   });
-
-  console.log('queryObj :', queryObj);
+  // }, {
+  //   "$jsonForm[0]": 'Boom'
+  // });
 
   // Check the status of the returned object.
   if (queryObj.status === 'error') {
     console.log(queryObj);
     return;
-  }
+  } 
+    // console.log('queryObj :', queryObj);
+  
 
   // Connect to mysql...
   const con = await mysql.createConnection(connection);

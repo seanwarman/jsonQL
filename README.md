@@ -377,7 +377,7 @@ This works because JsonQL is totally recursive meaning you can put a `ColumnObje
 
 ```js
 const ColumnObject = {
-  name: String,
+  name: String/JQString,
   string: String,
   number: Number,
   join: JoinObject,
@@ -396,4 +396,44 @@ const WhereObject = {
   isnot: String,
   or: WhereObject
 }
+```
+
+## JQString (Json Query Strings)
+
+For tables with json type fields you can use a json query string to select specific values in an array.
+
+```js
+{
+  db: 'bms_campaigns',
+  table: 'bookings',
+  columns: [
+    {name: '$jsonStatus[0]', as: 'firstStatus'},
+    {name: '$jsonForm[0].label', as: 'formLabel'}
+  ]
+}
+```
+
+All json query strings must start with a `$`.
+You can also search the json column by any string value within using a string (starting with '?') rather than a number.
+
+```js
+{
+  db: 'bms_campaigns',
+  table: 'bookings',
+  columns: [
+    {name: '$jsonForm[?Booking Month].value', as: 'bookingMonth'}
+  ]
+}
+```
+
+Json query strings are also compatible with the `data` sent to an `updateQL` function.
+
+```js
+updateQL({
+  db: 'bms_campaigns',
+  table: 'bookings',
+  where: [{name: 'bookingsKey', is: '123'}]
+}, {
+  "$jsonForm[?Booking Month].value": 'Jan'
+});
 ```
