@@ -380,7 +380,20 @@ module.exports = class JsonQL {
 
     )).map(wh => {
 
-      return `${dbObj.dbName}.${tableObj.tableName}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`}`;
+      let value = 
+        wh.is && typeof wh.is === 'number' ?
+        `= ${wh.is}`
+        :
+        wh.is && typeof wh.is === 'string' ?
+        `= '${wh.is}'`
+        :
+        wh.isnot && typeof wh.isnot === 'number' ?
+        `!= ${wh.isnot}`        :
+        wh.isnot && typeof wh.isnot === 'string' ?
+        `!= '${wh.isnot}'`
+        :
+        '';
+      return `${dbObj.dbName}.${tableObj.tableName}.${wh.name} ${value}`;
 
     }).join(' OR ')})`;
 
@@ -397,7 +410,20 @@ module.exports = class JsonQL {
 
     )).map(ha => {
 
-      return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
+      let value = 
+        ha.is && typeof ha.is === 'number' ?
+        `= ${ha.is}`
+        :
+        ha.is && typeof ha.is === 'string' ?
+        `= '${ha.is}'`
+        :
+        ha.isnot && typeof ha.isnot === 'number' ?
+        `!= ${ha.isnot}`        :
+        ha.isnot && typeof ha.isnot === 'string' ?
+        `!= '${ha.isnot}'`
+        :
+        '';
+      return `${ha.name} ${value}`;
 
     }).join(' OR ')})`;
 
@@ -495,28 +521,68 @@ module.exports = class JsonQL {
     if(ha.is && !this.validString(ha.is)) {
       return '';
     }
+    let value = 
+      ha.is && typeof ha.is === 'number' ?
+      `= ${ha.is}`
+      :
+      ha.is && typeof ha.is === 'string' ?
+      `= '${ha.is}'`
+      :
+      ha.isnot && typeof ha.isnot === 'number' ?
+      `!= ${ha.isnot}`        :
+      ha.isnot && typeof ha.isnot === 'string' ?
+      `!= '${ha.isnot}'`
+      :
+      '';
+      
     if(!ha.or) {
-      return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
+      return `${ha.name} ${value}`;
     }
-    return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`} OR ${this.haString(ha.or)}`;
+    return `${ha.name} ${value} OR ${this.haString(ha.or)}`;
   }
 
   countWhString(inDb, inTable, whDb, whTable, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
+    let value = 
+      wh.is && typeof wh.is === 'number' ?
+      `= ${wh.is}`
+      :
+      wh.is && typeof wh.is === 'string' ?
+      `= '${wh.is}'`
+      :
+      wh.isnot && typeof wh.isnot === 'number' ?
+      `!= ${wh.isnot}`        :
+      wh.isnot && typeof wh.isnot === 'string' ?
+      `!= '${wh.isnot}'`
+      :
+      '';
     if(!wh.or) {
-      return `${whDb}.${whTable}.${wh.name} ${wh.is ? `= ${inDb}.${inTable}.${wh.is}` : `!= ${inDb}.${inTable}.${wh.isnot}`}`;
+      return `${whDb}.${whTable}.${wh.name} ${value}`;
     }
-    return `${whDb}.${whTable}.${wh.name} ${wh.is ? `= ${inDb}.${inTable}.${wh.is}` : `!= ${inDb}.${inTable}.${wh.isnot}`} OR ${this.countWhString(inDb, inTable, whDb, whTable, wh.or)}`;
+    return `${whDb}.${whTable}.${wh.name} ${value} OR ${this.countWhString(inDb, inTable, whDb, whTable, wh.or)}`;
   }
 
   whString(db, table, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
+      let value = 
+        wh.is && typeof wh.is === 'number' ?
+        `= ${wh.is}`
+        :
+        wh.is && typeof wh.is === 'string' ?
+        `= '${wh.is}'`
+        :
+        wh.isnot && typeof wh.isnot === 'number' ?
+        `!= ${wh.isnot}`        :
+        wh.isnot && typeof wh.isnot === 'string' ?
+        `!= '${wh.isnot}'`
+        :
+        '';
     if(!wh.or) {
-      return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`}`;
+      return `${db}.${table}.${wh.name} ${value}`;
     }
-    return `${db}.${table}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`} OR ${this.whString(db, table, wh.or)}`;
+    return `${db}.${table}.${wh.name} ${value} OR ${this.whString(db, table, wh.or)}`;
   }
 
   fnString(db, table, fn, args) {

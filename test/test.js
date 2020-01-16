@@ -14,44 +14,32 @@ async function main() {
     table: 'bookings',
     columns: [
       {name: 'bookingName'},
-      {name: 'colorLabel'},
-      {name: 'bookingDivKey'},
+      {name: 'bookingsKey'},
       {
-        count: {
-          db: 'Biggly',
-          table: 'uploads',
-          where: [{name: 'bookingsKey', is: 'bookingsKey'}]
-        },
-        as: 'uploadsCount'
-      },
-      {join: {
-        db: 'Biggly',
-        table: 'users',
-        columns: [{
-          fn: 'CONCAT',
-          args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
-          as: 'createdName'
-        }],
-        where: [{name: 'createdUserKey', is: 'userKey'}]
-      }},
-      {
-        name: '$jsonForm[?Booking Month].value', as: 'bookingMonth'
+        name: '$jsonForm[?Bigg Spend].value', as: 'biggSpend'
       },
       {
-        name: 'bookingsKey'
+        name: '$jsonForm[?Bigg Spend]', as: 'biggSpendItem'
+      },
+      {
+        join: {
+          db: 'bms_booking',
+          table: 'bookingDivisions',
+          columns: [{name: 'divName'}],
+          where: [{name: 'bookingDivKey', is: 'bookingDivKey'}],
+        }
       }
     ],
     having: [
-      {
-        or: [{name: 'createdName', is: 'Carl Williams'}, {name: 'createdName', is: 'Zach Siddon'}]
-      },
+      // {name: 'biggSpend', number: 50}
+      {or: [
+        {name: 'biggSpend', is: 50},
+        {name: 'biggSpend', is: '50'}
+      ]},
+      {name: 'divName', is: 'Scribr'}
+
+      // {name: 'biggSpend', is: '50'}
     ],
-    where: [
-      {
-        or: [{name: 'colorLabel', is: 'orange'}, {name: 'colorLabel', is: 'purple'}]
-      },
-    ],
-    limit: [0, 15]
   });
   // }, {
   //   "$jsonForm[0]": 'Boom'
@@ -76,7 +64,9 @@ async function main() {
   } catch (err) {
     console.log(err)
   }
-  console.log('result :', result[0]);
+  console.log('result :', result[0][0]);
+  console.log('length :', result[0].length);
+  console.log(queryObj.query);
   await con.end()
 
 }
