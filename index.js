@@ -372,15 +372,55 @@ module.exports = class JsonQL {
     });
   }
 
+  pushOrArrWhere(dbObj, tableObj, or) {
+    let whereStr = `(${or.filter(wh => (
+
+      this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name) &&
+      ( this.validString(wh.is) || this.validString(wh.isnot) )
+
+    )).map(wh => {
+
+      return `${dbObj.dbName}.${tableObj.tableName}.${wh.name} ${wh.is ? `= '${wh.is}'` : `!= '${wh.isnot}'`}`;
+
+    }).join(' OR ')})`;
+
+    if(whereStr.length > 0) {
+      this.where.push(whereStr);
+    }
+  }
+
+  pushOrArrHaving(or) {
+    let havingStr = `(${or.filter(ha => (
+
+      this.validString(ha.name) &&
+      ( this.validString(ha.is) || this.validString(ha.isnot) )
+
+    )).map(ha => {
+
+      return `${ha.name} ${ha.is ? `= '${ha.is}'` : `!= '${ha.isnot}'`}`;
+
+    }).join(' OR ')})`;
+
+    if(havingStr.length > 0) {
+      this.having.push(havingStr);
+    }
+  }
+
   pushWhere(dbObj, tableObj, where) {
     where.forEach(wh => {
-      let whereStr = '';
-      
-      // Is this right? I don't think you can use alias names in a where...
-      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+      // This check here is a bit out of place but we want to keep 
+      // the old nested OR syntax so there it is.
+      if(!wh.name && wh.or && (wh.or || []).length > 0) {
+        this.pushOrArrWhere(dbObj, tableObj, wh.or);
         return;
       }
       
+      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        return;
+      }
+      let whereStr = '';
+      
+      // Is this right? I don't think you can use alias names in a where...
       whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
       if(whereStr.length > 0) {
         this.where.push(whereStr);
@@ -390,6 +430,12 @@ module.exports = class JsonQL {
 
   pushHaving(having) {
     having.forEach(ha => {
+      // This check here is a bit out of place but we want to keep 
+      // the old nested OR syntax so there it is.
+      if(!ha.name && ha.or && (ha.or || []).length > 0) {
+        this.pushOrArrHaving(ha.or);
+        return;
+      }
       let havingStr = `${this.haString(ha)}`;
       if(havingStr.length > 0) {
         this.having.push(havingStr);

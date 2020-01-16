@@ -41,7 +41,17 @@ async function main() {
         name: 'bookingsKey'
       }
     ],
-    limit: [0, 4]
+    having: [
+      {
+        or: [{name: 'createdName', is: 'Carl Williams'}, {name: 'createdName', is: 'Zach Siddon'}]
+      },
+    ],
+    where: [
+      {
+        or: [{name: 'colorLabel', is: 'orange'}, {name: 'colorLabel', is: 'purple'}]
+      },
+    ],
+    limit: [0, 15]
   });
   // }, {
   //   "$jsonForm[0]": 'Boom'
