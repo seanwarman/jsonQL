@@ -521,6 +521,9 @@ module.exports = class JsonQL {
     if(ha.is && !this.validString(ha.is)) {
       return '';
     }
+    if((ha || []).length > 0 && typeof ha === 'object') {
+      return this.orHaString(ha);
+    }
     let value = 
       ha.is && typeof ha.is === 'number' ?
       `= ${ha.is}`
@@ -539,6 +542,66 @@ module.exports = class JsonQL {
       return `${ha.name} ${value}`;
     }
     return `${ha.name} ${value} OR ${this.haString(ha.or)}`;
+  }
+
+  orWhString(db, table, orArr) {
+    return `${orArr.filter(or => (
+      (or.name && this.validBySchema(db, table, or.name))
+      &&
+      (
+        or.isnot && this.validString(or.isnot)
+        ||
+        or.is && this.validString(or.is)
+      )
+    )).map(or => {
+
+    let value = 
+      or.is && typeof or.is === 'number' ?
+      `= ${or.is}`
+      :
+      or.is && typeof or.is === 'string' ?
+      `= '${or.is}'`
+      :
+      or.isnot && typeof or.isnot === 'number' ?
+      `!= ${or.isnot}`        :
+      or.isnot && typeof or.isnot === 'string' ?
+      `!= '${or.isnot}'`
+      :
+      '';
+      
+      return `${db}.${table}.${or.name} ${value}`;
+
+    }).join(' OR ')}`
+  }
+
+  orHaString(orArr) {
+    return `${orArr.filter(or => (
+      (or.name && this.validString(or.name))
+      &&
+      (
+        or.isnot && this.validString(or.isnot)
+        ||
+        or.is && this.validString(or.is)
+      )
+    )).map(or => {
+
+    let value = 
+      or.is && typeof or.is === 'number' ?
+      `= ${or.is}`
+      :
+      or.is && typeof or.is === 'string' ?
+      `= '${or.is}'`
+      :
+      or.isnot && typeof or.isnot === 'number' ?
+      `!= ${or.isnot}`        :
+      or.isnot && typeof or.isnot === 'string' ?
+      `!= '${or.isnot}'`
+      :
+      '';
+      
+      return `${or.name} ${value}`;
+
+    }).join(' OR ')}`
   }
 
   countWhString(inDb, inTable, whDb, whTable, wh) {
@@ -566,6 +629,9 @@ module.exports = class JsonQL {
   whString(db, table, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
+    if((wh || []).length > 0 && typeof wh === 'object') {
+      return this.orWhString(db, table, wh);
+    }
       let value = 
         wh.is && typeof wh.is === 'number' ?
         `= ${wh.is}`

@@ -30,16 +30,20 @@ async function main() {
         }
       }
     ],
-    having: [
-      // {name: 'biggSpend', number: 50}
-      {or: [
-        {name: 'biggSpend', is: 50},
-        {name: 'biggSpend', is: '50'}
-      ]},
-      {name: 'divName', is: 'Scribr'}
-
-      // {name: 'biggSpend', is: '50'}
+    where: [
+      [
+      {name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'},
+      {name: 'bookingsKey', is: '0021ecb0-20ee-11ea-8236-771da2034d25'},
+      ]
     ],
+    // having: [
+    //   [
+    //     {name: 'biggSpend', is: 50},
+    //     {name: 'biggSpend', is: '50'}
+    //   ],
+    //   {name: 'divName', is: 'Scribr'}
+    // ],
+    limit: [0,5]
   });
   // }, {
   //   "$jsonForm[0]": 'Boom'
@@ -50,7 +54,7 @@ async function main() {
     console.log(queryObj);
     return;
   } 
-    // console.log('queryObj :', queryObj);
+    console.log('queryObj :', queryObj);
   
 
   // Connect to mysql...
@@ -64,7 +68,7 @@ async function main() {
   } catch (err) {
     console.log(err)
   }
-  console.log('result :', result[0][0]);
+  console.log('result :', result[0]);
   console.log('length :', result[0].length);
   console.log(queryObj.query);
   await con.end()

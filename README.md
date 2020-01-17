@@ -44,7 +44,7 @@ hundreds of potential endpoints.
 ### Where
 
 You'll notice `where` is an array. That's so we can add extra ones for multiple ANDs.
-For an OR we can use the `or` key and put an array inside it...
+For an OR use an array of `where` items...
 
 ```js
 {
@@ -61,24 +61,13 @@ For an OR we can use the `or` key and put an array inside it...
         is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
       },
       // ...AND
-      {
-        or: [
-          {
-            name: 'bookingsKey',
-            is: '123',
-          },
-          // ...OR
-          {
-            name: 'bookingsKey',
-            is: '321'
-          },
-          // ...OR
-          {
-            name: 'bookingsKey',
-            is: 'd03563a1-2e2c-11ea-b3ec-a1387ad1100d',
-          }
-        ]
-      }
+      [
+        { name: 'bookingsKey', is: '123', },
+        // ...OR
+        { name: 'bookingsKey', is: '321' },
+        // ...OR
+        { name: 'bookingsKey', is: 'd03563a1-2e2c-11ea-b3ec-a1387ad1100d' }
+      ]
     ]
   },
 ```
