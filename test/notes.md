@@ -133,4 +133,24 @@ columns: [
   ]
   ```
 
+  - Add '+' to a string to denote a `CONCAT`.
+  ```js
+  { name: '$firstName + " " + $lastName', as: 'fullName' }
+  ===
+  'CONCAT(firstName, " ", lastName) AS fullName'
 
+  [
+    '$firstName',
+    ' + " "',
+    ' + $lastName'
+  ]
+  [
+    'firstName',
+    'CONCAT(firstName, " ")',
+    'CONCAT(CONCAT(firstName, " "), lastName)',
+  ]
+  ```
+
+- ~~First we need a badass regex that can make the first array for us.~~
+- ~~Then import into index.~~
+- Then export the validation functions and use them in our new jQStringMaker.

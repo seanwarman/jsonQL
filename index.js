@@ -1,3 +1,4 @@
+const jQStringMaker = require('./qStringLib.js');
 module.exports = class JsonQL {
   constructor(schema) {
     this.schema = schema;
@@ -479,9 +480,12 @@ module.exports = class JsonQL {
   }
   
   jExString(db, table, jQString) {
-    let column = this.jColString(db, table, jQString);
-    let index = this.jInString(db, table, column, jQString);
-    return `JSON_EXTRACT(${column}, ${index})`;
+    let str = jQStringMaker(db, table, jQString);
+    console.log(str);
+    return str;
+    // let column = this.jColString(db, table, jQString);
+    // let index = this.jInString(db, table, column, jQString);
+    // return `JSON_EXTRACT(${column}, ${index})`;
   }
 
   jColString(db, table, jQString) {
