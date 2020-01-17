@@ -73,7 +73,7 @@ where
 bookingsKey = 'd03563a0-2e2c-11ea-b3ec-a1387ad1100d'
 ```
 
-- Add the $ syntax to the columns objects.
+- ~~Add the $ syntax to the columns objects.~~
 
 ```js
 columns: [
@@ -81,8 +81,56 @@ columns: [
 ]
 ```
 
-- Add a COUNT to the SELECTs like in the bookings get.
+- ~~Add a COUNT to the SELECTs like in the bookings get.~~
 
 - Add an primary auto increment key to the schema.
+
+- Make the $json syntax "real", so it can be used in all `name` strings and for all combinations.
+  - First of all, it will probably need to have it's own controller.
+  - Split each part of the string into an array of strings.
+  - Each item in the array will then need a sql equivelent.
+  ```js
+  '[?Booking Month]' === 'JSON_SEARCH(jsonForm, "one", "Booking Month")'
+  '[0]'              === 'JSON_EXTRACT(jsonForm, "$[0]")'
+  ```
+  - The first arg of the json function should probably be whatever string array item came before it.
+  ```js
+  [
+    '$jsonForm',
+    '[0]',
+    '[0]'
+  ]
+  [
+    'jsonForm',
+    'JSON_EXTRACT(jsonForm, "$[0]")',
+    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$[0]"), "$[0]")',
+  ]
+  ```
+  - Then a '.' value should be added to the last arg of the function preceeding it.
+  ```js
+  [
+    '$jsonForm',
+    '[0]',
+    '[0]',
+    '.label'
+  ]
+  [
+    'jsonForm',
+    'JSON_EXTRACT(jsonForm, "$[0]")',
+    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$[0]"), "$[0]")',
+    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$[0]"), "$[0].label")',
+  ]
+  ```
+  - If the '.' comes after a $ selection, then, I think, it needs to make another `JSON_EXTRACT`.
+  ```js
+  [
+    '$jsonForm',
+    '.label'
+  ]
+  [
+    'jsonForm',
+    'JSON_EXTRACT(jsonForm, "$.label")',
+  ]
+  ```
 
 
