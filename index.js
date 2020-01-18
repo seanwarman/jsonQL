@@ -867,20 +867,25 @@ module.exports = class JsonQL {
 
     function which(string, prevString) {
       if(/\$\w+/.test(string)) {
+        string = string.slice(1);
+        if(!this.validBySchema(db, table, string)) return;
         // 'name';
         return `${db}.${table}.${string.slice(1)}`;
       }
       if(/\[\d\]/.test(string)) {
         // 'index';
+        if(!this.validString(string)) return;
         return `JSON_EXTRACT(${prevString}, "$${string}")`
       }
       if(/\.\w+/.test(string)) {
         // 'target';
+        if(!this.validString(string)) return;
         return `JSON_EXTRACT(${prevString}, "$${string}")`
       }
       if(/\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/.test(string)) {
         // 'search';
         string = string.slice(2, -1);
+        if(!this.validString(string)) return;
         return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'all', '${string}'), 4, 1), ']'))`;
       }
     }
