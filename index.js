@@ -850,7 +850,7 @@ module.exports = class JsonQL {
     return /^\$/.test(key); 
   }
 
-  jQString(db, table, str) {
+  jQStringMaker(db, table, str) {
 
     let reg = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
 
