@@ -299,7 +299,7 @@ module.exports = class JsonQL {
       } else if(col.string && this.validString(col.string)) {
         selectStr = `'${col.string}'`;
       } else if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
-        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
+        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'one', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
       }
       if(col.count) {
         selectStr += this.countString(dbObj.dbName, tableObj.tableName, col.count);
@@ -873,7 +873,7 @@ module.exports = class JsonQL {
       // 'search';
       string = string.slice(2, -1);
       if(!this.validString(string)) return;
-      return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'all', '${string}'), 4, 1), ']'))`;
+      return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'one', '${string}'), 4, 1), ']'))`;
     }
   }
 
