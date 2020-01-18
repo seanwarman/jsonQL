@@ -176,7 +176,7 @@ module.exports = class JsonQL {
 
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
-      if(this.keyIsQuery(key)) {
+      if(this.validJQString(db, table, key)) {
         this.pushQuery(db, table, key, data[key]);
         return;
       }
@@ -288,26 +288,24 @@ module.exports = class JsonQL {
   pushNameCols(dbObj, tableObj, nameCols) {
     nameCols.forEach(col => {
       let selectStr = '';
-      if(col.name && this.keyIsQuery(col.name)) {
+      if(col.name && this.validJQString(dbObj.dbName, tableObj.tableName, col.name)) {
         selectStr = this.jExString(dbObj.dbName, tableObj.tableName, col.name);
       } else if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
         selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
-      }
-      if(col.number && typeof col.number === 'number') {
+      } else if(col.number && typeof col.number === 'number') {
         selectStr = `${col.number}`;
       } else if(col.number) {
         this.errors.push(col.number + ' is not a number');
-      }
-      if(col.string && this.validString(col.string)) {
+      } else if(col.string && this.validString(col.string)) {
         selectStr = `'${col.string}'`;
-      }
-      if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
+      } else if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
         selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
       }
       if(col.count) {
         selectStr += this.countString(dbObj.dbName, tableObj.tableName, col.count);
       }
-      if(col.as && this.validString(col.as)) {
+      // We can't have an `as` without something before it so also check the selectStr length
+      if(col.as && this.validString(col.as) && selectStr.length > 0) {
         selectStr += ` AS ${col.as}`;
       }
       if(selectStr.length > 0) {
@@ -846,61 +844,53 @@ module.exports = class JsonQL {
   // ░░█ █░░█ ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█ ▀▀█
   // █▄█ ▀▀▀█ ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
 
-  keyIsQuery(key) {
-    return /^\$/.test(key); 
+  validJQString(db, table, key) {
+    if(/^\$/.test(key)) {
+      const name = key.slice(1, key.search(/[\.\[]/));
+      if(!this.validBySchema(db, table, name)) return false;
+      return true;
+    }
+    return false;
+  }
+
+  jqTestType(string, prevString) {
+    let name = /\$\w+/;
+    let index = /\[\d\]/;
+    let target = /\.\w+/;
+    let search = /\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/;
+
+    if(index.test(string)) {
+      // 'index';
+      if(!this.validString(string)) return;
+      return `JSON_EXTRACT(${prevString}, "$${string}")`
+    }
+    if(target.test(string)) {
+      // 'target';
+      if(!this.validString(string)) return;
+      return `JSON_EXTRACT(${prevString}, "$${string}")`
+    }
+    if(search.test(string)) {
+      // 'search';
+      string = string.slice(2, -1);
+      if(!this.validString(string)) return;
+      return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'all', '${string}'), 4, 1), ']'))`;
+    }
   }
 
   jQStringMaker(db, table, str) {
 
     let reg = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
 
-    // let str = '$jsonForm[0].value[?Booking Month].label';
-
-    if(!str.startsWith('$')) {
-      console.log('json query strings must start with a $ sign');
-      return;
-    }
-
     const matches = str.match(reg);
 
     console.log(matches);
 
-    function which(string, prevString) {
-      if(/\$\w+/.test(string)) {
-        string = string.slice(1);
-        if(!this.validBySchema(db, table, string)) return;
-        // 'name';
-        return `${db}.${table}.${string.slice(1)}`;
-      }
-      if(/\[\d\]/.test(string)) {
-        // 'index';
-        if(!this.validString(string)) return;
-        return `JSON_EXTRACT(${prevString}, "$${string}")`
-      }
-      if(/\.\w+/.test(string)) {
-        // 'target';
-        if(!this.validString(string)) return;
-        return `JSON_EXTRACT(${prevString}, "$${string}")`
-      }
-      if(/\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/.test(string)) {
-        // 'search';
-        string = string.slice(2, -1);
-        if(!this.validString(string)) return;
-        return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'all', '${string}'), 4, 1), ']'))`;
-      }
-    }
-
-    let name = /\$\w+/;
-    let index = /\[\d\]/;
-    let target = /\.\w+/;
-    let search = /\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/;
-
     let result = matches.reduce((arr, match, i) => {
 
       if(i === 0) {
-        return [...arr, which(match)];
+        return [...arr, `${db}.${table}.${match.slice(1)}`];
       }
-      return [...arr, which(match, arr[i-1])];
+      return [...arr, this.jqTestType(match, arr[i-1])];
 
     }, []);
 
