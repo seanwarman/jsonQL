@@ -9,32 +9,14 @@ async function main() {
   const jsonQL = new JsonQL(schema);
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
-  let queryObj = jsonQL.selectQL({
-    db: 'bms_booking',
+  let queryObj = jsonQL.updateQL({
+    db: 'bms_campaigns',
     table: 'bookings',
-    columns: [
-      {name: 'bookingName'},
-      {name: 'bookingsKey'},
-      {
-        name: '$jsonForm[?Bigg Spend].value', as: 'biggSpend'
-      },
-      {
-        name: '$jsonForm[?Bigg Spend]', as: 'biggSpendItem'
-      },
-      {
-        join: {
-          db: 'bms_booking',
-          table: 'bookingDivisions',
-          columns: [{name: 'divName'}],
-          where: [{name: 'bookingDivKey', is: 'bookingDivKey'}],
-        }
-      }
-    ],
     where: [
-      [
-      {name: 'bookingsKey', is: '008da801-1744-11ea-9d83-65b05ef21e9b'},
-      {name: 'bookingsKey', is: '0021ecb0-20ee-11ea-8236-771da2034d25'},
-      ]
+      {name: 'bookingsKey', is: 'fd6bd940-2e26-11ea-b768-834e18b87afe'},
+      // [
+      // {name: 'bookingsKey', is: '0021ecb0-20ee-11ea-8236-771da2034d25'},
+      // ]
     ],
     // having: [
     //   [
@@ -43,11 +25,11 @@ async function main() {
     //   ],
     //   {name: 'divName', is: 'Scribr'}
     // ],
-    limit: [0,5]
-  });
-  // }, {
-  //   "$jsonForm[0]": 'Boom'
+    // limit: [0,5]
   // });
+  }, {
+    "$jsonForm[?Target Keywords].value": 'nadda'
+  });
 
   // Check the status of the returned object.
   if (queryObj.status === 'error') {

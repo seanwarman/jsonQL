@@ -133,24 +133,6 @@ columns: [
   ]
   ```
 
-  - Add '+' to a string to denote a `CONCAT`.
-  ```js
-  { name: '$firstName + " " + $lastName', as: 'fullName' }
-  ===
-  'CONCAT(firstName, " ", lastName) AS fullName'
-
-  [
-    '$firstName',
-    ' + " "',
-    ' + $lastName'
-  ]
-  [
-    'firstName',
-    'CONCAT(firstName, " ")',
-    'CONCAT(CONCAT(firstName, " "), lastName)',
-  ]
-  ```
-
 - ~~First we need a badass regex that can make the first array for us.~~
 - ~~Then import into index.~~
 - ~~Then export the validation functions and use them in our new jQStringMaker.~~
@@ -186,9 +168,10 @@ const column = matches.unshift().slice(1);
 // 'jsonForm'
 
 const result = [
-  `CONCAT("$", "[0]")`,
-  `CONCAT(CONCAT("$", "[0]"), "[0]")`,
-  `CONCAT(CONCAT(CONCAT("$", "[0]"), "[0]"), ".value")`,
+  `CONCAT("$")`,
+  `CONCAT(CONCAT("$"), "[0]")`,
+  `CONCAT(CONCAT(CONCAT("$"), "[0]"), "[0]")`,
+  `CONCAT(CONCAT(CONCAT(CONCAT("$"), "[0]"), "[0]"), ".value")`,
 ]
   return `JSON_SET(${column}, ${result[result.length]}, ${val})`;
 ```
@@ -203,10 +186,32 @@ const matches = [
 ]
 
 const result = [
-  `jsonForm`,
-  `CONCAT("$", CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']'))`,
-  `CONCAT(CONCAT("$", CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']')), ".value")`,
+  `CONCAT("$")`,
+  `CONCAT(CONCAT("$"), CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']'))`,
+  `CONCAT(CONCAT(CONCAT("$"), CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']')), ".value")`,
 ]
 ```
 
-- Change the original jqstring maker so that the first jsonForm value is wrapped around a json_extract.
+- ~~Change the original jqstring maker so that the first jsonForm value is wrapped around a json_extract.~~
+
+
+  - Add spaces to a string to denote a `CONCAT`.
+  ```js
+  { name: '$firstName $lastName', as: 'fullName' }
+  ===
+  'CONCAT(firstName, " ", lastName) AS fullName'
+
+  [
+    '$firstName',
+    ' ',
+    '$lastName'
+  ]
+  [
+    'firstName',
+    'CONCAT(firstName, " ")',
+    'CONCAT(CONCAT(firstName, " "), lastName)',
+  ]
+  ```
+
+  - Add jQStrings to the `name` param in **JoinObjects**.
+  - Add jQStrings to the `name` param in **WhereObjects** and **HavingObjects**.

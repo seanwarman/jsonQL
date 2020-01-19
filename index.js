@@ -177,7 +177,7 @@ module.exports = class JsonQL {
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
       if(this.validJQString(db, table, key)) {
-        this.pushQuery(db, table, key, data[key]);
+        this.pushJQString(db, table, key, data[key]);
         return;
       }
 
@@ -198,32 +198,21 @@ module.exports = class JsonQL {
   // █░░█ █░░█ ▀▀█ █▀▀█   █▀▀ █░░█ █░░█ █░░ ░░█░░ ▀█▀ █░░█ █░░█ ▀▀█
   // █▀▀▀ ░▀▀▀ ▀▀▀ ▀░░▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
 
-  pushQuery(db, table, key, value) {
+  pushJQString(db, table, key, value) {
     // let key = '$jsonForm[?Booking Month].value';
 
     let column = this.jColString(db, table, key);
-    let index = this.jInString(db, table, column, key);
 
     column = `${db}.${table}.${column}`;
 
-    if(typeof value === 'string') {
-      value = `'${value}'`;
-    }
-
     value = `IF(
-      JSON_SET(${column}, ${index}, ${value}) IS NOT NULL,
-      JSON_SET(${column}, ${index}, ${value}),
+      ${this.jQSet(db, table, key, value)} IS NOT NULL,
+      ${this.jQSet(db, table, key, value)},
       ${column}
     )`;
 
     this.columns.push(`${column}`);
     this.values.push(value);
-    // IF(
-    //   (JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom') IS NOT NULL),
-    //   JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom'),
-    //   jsonForm
-    // )
-
   }
 
   pushOrderBy(db, table, orderBy) {
@@ -289,7 +278,7 @@ module.exports = class JsonQL {
     nameCols.forEach(col => {
       let selectStr = '';
       if(col.name && this.validJQString(dbObj.dbName, tableObj.tableName, col.name)) {
-        selectStr = this.jExString(dbObj.dbName, tableObj.tableName, col.name);
+        selectStr = this.jQExtract(dbObj.dbName, tableObj.tableName, col.name);
       } else if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
         selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
       } else if(col.number && typeof col.number === 'number') {
@@ -474,15 +463,6 @@ module.exports = class JsonQL {
   countString(db, table, count) {
     let whereStr = count.where.map(wh => this.countWhString(db, table, count.db, count.table, wh)).join();
     return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
-  }
-  
-  jExString(db, table, jQString) {
-    let str = this.jQStringMaker(db, table, jQString);
-    console.log(str);
-    return str;
-    // let column = this.jColString(db, table, jQString);
-    // let index = this.jInString(db, table, column, jQString);
-    // return `JSON_EXTRACT(${column}, ${index})`;
   }
 
   jColString(db, table, jQString) {
@@ -853,50 +833,55 @@ module.exports = class JsonQL {
     return false;
   }
 
-  jqTestType(string, prevString) {
-    let name = /\$\w+/;
+  jQString(name, string, prevString) {
+    let nameReg = /\$\w+/;
     let index = /\[\d\]/;
     let target = /\.\w+/;
     let search = /\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/;
 
+    if(nameReg.test(string)) {
+      return `CONCAT("$")`;
+    }
     if(index.test(string)) {
       // 'index';
       if(!this.validString(string)) return;
-      return `JSON_EXTRACT(${prevString}, "$${string}")`
+      return `CONCAT(${prevString}, "${string}")`
     }
     if(target.test(string)) {
       // 'target';
       if(!this.validString(string)) return;
-      return `JSON_EXTRACT(${prevString}, "$${string}")`
+      return `CONCAT(${prevString}, "${string}")`
     }
     if(search.test(string)) {
       // 'search';
       string = string.slice(2, -1);
       if(!this.validString(string)) return;
-      return `JSON_EXTRACT(${prevString}, CONCAT('$[', SUBSTR(JSON_SEARCH(${prevString}, 'one', '${string}'), 4, 1), ']'))`;
+      return `CONCAT(${prevString}, CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(${name}, "$"),'one','${string}'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(${name}, "$"), 'one', '${string}'))-4),']'))`;
     }
   }
 
-  jQStringMaker(db, table, str) {
-
-    let reg = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
-
-    const matches = str.match(reg);
-
-    console.log(matches);
-
+  jQStringMaker(name, matches) {
     let result = matches.reduce((arr, match, i) => {
-
-      if(i === 0) {
-        return [...arr, `${db}.${table}.${match.slice(1)}`];
-      }
-      return [...arr, this.jqTestType(match, arr[i-1])];
-
+      return [...arr, this.jQString(name, match, arr[i-1])];
     }, []);
 
-    console.log(result);
-
     return result[result.length - 1];
+  }
 
+  jQExtract(db, table, jQStr) {
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${db}.${table}.${matches[0].slice(1)}`
+    return `JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)})`;
+  }
+
+  jQSet(db, table, jQStr, value) {
+    if(typeof value === 'string') {
+      value = `'${value}'`;
+    }
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${db}.${table}.${matches[0].slice(1)}`
+    return `JSON_SET(${name}, ${this.jQStringMaker(name, matches)}, ${value})`;
   }
 }

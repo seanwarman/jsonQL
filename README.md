@@ -426,7 +426,7 @@ const ColumnObject = {
 }
 ```
 
-### WhereObject
+### WhereObject and HavingObject
               
 ```js
 const WhereObject = {
