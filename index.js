@@ -360,29 +360,25 @@ module.exports = class JsonQL {
   }
 
   pushOrArrWhere(dbObj, tableObj, or) {
-    let whereStr = `(${or.filter(wh => (
+    let whereStr = '';
+    or.forEach((wh, i) => {
 
-      this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name) &&
-      ( this.validString(wh.is) || this.validString(wh.isnot) )
+      if(this.validJQString(dbObj.dbName, tableObj.tableName, wh.name)) {
+        if(i !== 0) {
+          whereStr += ' OR ';
+        }
+        whereStr += `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        return;
+      }
 
-    )).map(wh => {
-
-      let value = 
-        wh.is && typeof wh.is === 'number' ?
-        `= ${wh.is}`
-        :
-        wh.is && typeof wh.is === 'string' ?
-        `= '${wh.is}'`
-        :
-        wh.isnot && typeof wh.isnot === 'number' ?
-        `!= ${wh.isnot}`        :
-        wh.isnot && typeof wh.isnot === 'string' ?
-        `!= '${wh.isnot}'`
-        :
-        '';
-      return `${dbObj.dbName}.${tableObj.tableName}.${wh.name} ${value}`;
-
-    }).join(' OR ')})`;
+      if(this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        if(i !== 0) {
+          whereStr += ' OR ';
+        }
+        whereStr += `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        return;
+      }
+    });
 
     if(whereStr.length > 0) {
       this.where.push(whereStr);
@@ -421,23 +417,29 @@ module.exports = class JsonQL {
 
   pushWhere(dbObj, tableObj, where) {
     where.forEach(wh => {
-      // This check here is a bit out of place but we want to keep 
-      // the old nested OR syntax so there it is.
-      if(!wh.name && wh.or && (wh.or || []).length > 0) {
-        this.pushOrArrWhere(dbObj, tableObj, wh.or);
-        return;
-      }
-      
-      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
-        return;
-      }
+
       let whereStr = '';
-      
-      // Is this right? I don't think you can use alias names in a where...
-      whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
-      if(whereStr.length > 0) {
-        this.where.push(whereStr);
+      if((wh || []).length > 0) {
+        this.pushOrArrWhere(dbObj, tableObj, wh);
+        return;
       }
+
+      if(this.validJQString(dbObj.dbName, tableObj.tableName, wh.name)) {
+        whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        if(whereStr.length > 0) {
+          this.where.push(whereStr);
+          return;
+        }
+      }
+      
+      if(this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        if(whereStr.length > 0) {
+          this.where.push(whereStr);
+          return;
+        }
+      }
+      
     });
   }
 
@@ -527,7 +529,10 @@ module.exports = class JsonQL {
 
   orWhString(db, table, orArr) {
     return `${orArr.filter(or => (
-      (or.name && this.validBySchema(db, table, or.name))
+      (
+        or.name && 
+        (this.validBySchema(db, table, or.name) || this.validJQString(db, table, or.name))
+      )
       &&
       (
         or.isnot && this.validString(or.isnot)
@@ -536,21 +541,26 @@ module.exports = class JsonQL {
       )
     )).map(or => {
 
-    let value = 
-      or.is && typeof or.is === 'number' ?
-      `= ${or.is}`
-      :
-      or.is && typeof or.is === 'string' ?
-      `= '${or.is}'`
-      :
-      or.isnot && typeof or.isnot === 'number' ?
-      `!= ${or.isnot}`        :
-      or.isnot && typeof or.isnot === 'string' ?
-      `!= '${or.isnot}'`
-      :
-      '';
-      
-      return `${db}.${table}.${or.name} ${value}`;
+      let value = 
+        or.is && typeof or.is === 'number' ?
+        `= ${or.is}`
+        :
+        or.is && typeof or.is === 'string' ?
+        `= '${or.is}'`
+        :
+        or.isnot && typeof or.isnot === 'number' ?
+        `!= ${or.isnot}`        :
+        or.isnot && typeof or.isnot === 'string' ?
+        `!= '${or.isnot}'`
+        :
+        '';
+
+      let name = or.name.slice(0,1) === '$' ?
+        this.jQExtract(db, table, or.name)
+        :
+        `${db}.${table}.${or.name}`
+
+      return `${name} ${value}`;
 
     }).join(' OR ')}`
   }
@@ -610,26 +620,26 @@ module.exports = class JsonQL {
   whString(db, table, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
-    if((wh || []).length > 0 && typeof wh === 'object') {
-      return this.orWhString(db, table, wh);
-    }
-      let value = 
-        wh.is && typeof wh.is === 'number' ?
-        `= ${wh.is}`
-        :
-        wh.is && typeof wh.is === 'string' ?
-        `= '${wh.is}'`
-        :
-        wh.isnot && typeof wh.isnot === 'number' ?
-        `!= ${wh.isnot}`        :
-        wh.isnot && typeof wh.isnot === 'string' ?
-        `!= '${wh.isnot}'`
-        :
-        '';
-    if(!wh.or) {
-      return `${db}.${table}.${wh.name} ${value}`;
-    }
-    return `${db}.${table}.${wh.name} ${value} OR ${this.whString(db, table, wh.or)}`;
+
+    let value = 
+      wh.is && typeof wh.is === 'number' ?
+      `= ${wh.is}`
+      :
+      wh.is && typeof wh.is === 'string' ?
+      `= '${wh.is}'`
+      :
+      wh.isnot && typeof wh.isnot === 'number' ?
+      `!= ${wh.isnot}`        :
+      wh.isnot && typeof wh.isnot === 'string' ?
+      `!= '${wh.isnot}'`
+      :
+      '';
+    let name = this.validJQString(db, table, wh.name) ?
+      this.jQExtract(db, table, wh.name)
+      :
+      `${db}.${table}.${or.name}`
+
+    return `${name} ${value}`;
   }
 
   fnString(db, table, fn, args) {
