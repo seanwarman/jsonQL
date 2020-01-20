@@ -42,7 +42,7 @@ async function main() {
     // ],
   // });
   }, {
-    bookingsName: 'thing',
+    bookingName: 'thing',
     tmpKey: '1234',
     units: 1,
   });
