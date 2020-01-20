@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise');
 const connection = require('./config');
-const schema = require('../../bms-api/general/schema/admin');
+const schema = require('./schema/admin');
 const JsonQL = require('../');
 
 async function main() {
@@ -9,41 +9,43 @@ async function main() {
   const jsonQL = new JsonQL(schema);
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
-  let queryObj = jsonQL.selectQL({
-    db: 'bms_booking',
+  let queryObj = jsonQL.createQL({
+    db: 'bms_campaigns',
     table: 'bookings',
-    columns: [
-      {name: 'bookingName'},
-      {name: 'bookingsKey'},
-      {
-        name: '$jsonForm[?Bigg Spend].value', as: 'biggSpend'
-      },
-      {
-        name: '$jsonForm[?Bigg Spend]', as: 'biggSpendItem'
-      },
-      {
-        join: {
-          db: 'bms_booking',
-          table: 'bookingDivisions',
-          columns: [{name: 'divName'}],
-          where: [{name: 'bookingDivKey', is: 'bookingDivKey'}],
-        }
-      }
-    ],
-    having: [
-      // {name: 'biggSpend', number: 50}
-      {or: [
-        {name: 'biggSpend', is: 50},
-        {name: 'biggSpend', is: '50'}
-      ]},
-      {name: 'divName', is: 'Scribr'}
+    // columns: [
+    //   {name: 'bookingName'},
+    //   {name: 'bookingsKey'},
+      // {
+      //   name: '$jsonForm[?Bigg Spend].value', as: 'biggSpend'
+      // },
+      // {
+      //   name: '$jsonForm[?Bigg Spend]', as: 'biggSpendItem'
+      // },
+      // {
+      //   join: {
+      //     db: 'bms_booking',
+      //     table: 'bookingDivisions',
+      //     columns: [{name: 'divName'}],
+      //     where: [{name: 'bookingDivKey', is: 'bookingDivKey'}],
+      //   }
+      // }
+    // ],
+    // having: [
+    //   // {name: 'biggSpend', number: 50}
+    //   {or: [
+    //     {name: 'biggSpend', is: 50},
+    //     {name: 'biggSpend', is: '50'}
+    //   ]},
+    //   {name: 'divName', is: 'Scribr'}
 
-      // {name: 'biggSpend', is: '50'}
-    ],
-  });
-  // }, {
-  //   "$jsonForm[0]": 'Boom'
+    //   // {name: 'biggSpend', is: '50'}
+    // ],
   // });
+  }, {
+    bookingsName: 'thing',
+    tmpKey: '1234',
+    units: 1,
+  });
 
   // Check the status of the returned object.
   if (queryObj.status === 'error') {
