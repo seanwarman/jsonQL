@@ -484,7 +484,7 @@ module.exports = class JsonQL {
   // ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀   ▀░░ ░▀▀▀ ▀░░▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀ ▀▀▀
 
   countString(db, table, count) {
-    let whereStr = count.where.map(wh => this.countWhString(db, table, count.db, count.table, wh)).join();
+    let whereStr = count.where.map(wh => this.whString(count.db, count.table, wh)).join();
     return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
   }
 
@@ -539,6 +539,14 @@ module.exports = class JsonQL {
       `!= ${ha.isnot}`        :
       ha.isnot && typeof ha.isnot === 'string' ?
       `!= '${ha.isnot}'`
+      :
+      ha.isbetween ?
+      `BETWEEN ${ha.isbetween.map(val => (
+        typeof val === 'string' ?
+        `'${val}'`
+        :
+        val
+      )).join(' AND ')}`
       :
       '';
       
@@ -641,6 +649,8 @@ module.exports = class JsonQL {
   whString(db, table, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
+    if(wh.isbetween && !this.validString(wh.isbetween[0])) return '';
+    if(wh.isbetween && !this.validString(wh.isbetween[1])) return '';
 
     let value = 
       wh.is && typeof wh.is === 'number' ?
@@ -653,6 +663,14 @@ module.exports = class JsonQL {
       `!= ${wh.isnot}`        :
       wh.isnot && typeof wh.isnot === 'string' ?
       `!= '${wh.isnot}'`
+      :
+      wh.isbetween ?
+      `BETWEEN ${wh.isbetween.map(val => (
+        typeof val === 'string' ?
+        `'${val}'`
+        :
+        val
+      )).join(' AND ')}`
       :
       '';
     let name = this.validJQString(db, table, wh.name) ?
