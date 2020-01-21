@@ -115,10 +115,10 @@ columns: [
     '.label'
   ]
   [
-    'jsonForm',
-    'JSON_EXTRACT(jsonForm, "$[0]")',
-    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$[0]"), "$[0]")',
-    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$[0]"), "$[0].label")',
+    'JSON_EXTRACT(jsonForm, "$")',
+    'JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$"), "$[0]")',
+    'JSON_EXTRACT(JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$"), "$[0]"), "$[0]")',
+    'JSON_EXTRACT(JSON_EXTRACT(JSON_EXTRACT(JSON_EXTRACT(jsonForm, "$"), "$[0]"), "$[0]"), "$.label")',
   ]
   ```
   - If the '.' comes after a $ selection, then, I think, it needs to make another `JSON_EXTRACT`.
@@ -133,4 +133,85 @@ columns: [
   ]
   ```
 
+- ~~First we need a badass regex that can make the first array for us.~~
+- ~~Then import into index.~~
+- ~~Then export the validation functions and use them in our new jQStringMaker.~~
 
+
+- A JSON_SET and a JSON_EXTRACT work similarly but not the same.
+
+```sql
+JSON_EXTRACT(JSON_EXTRACT(jsonForm, CONCAT('$[', SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4, 1), ']')), "$.value")
+
+-- equals '40' or whatever
+
+JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm,'one','Bigg Spend'), 4,LOCATE('].',JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'cool month')
+
+-- eqauls the whole jsonForm object but with the `value` value - 'cool month' 
+```
+
+These differences mean, I think, that the first arg of JSON_SET must always stay as `jsonForm`.
+The matches should build with nested concats that then get put into a json_set.
+```js
+const jqString = '$jsonForm[0][0].value';
+
+const val = 'hi!';
+
+const matches = [
+  '$jsonForm',
+  '[0]',
+  '[0]',
+  '.value'
+]
+
+const column = matches.unshift().slice(1);
+// 'jsonForm'
+
+const result = [
+  `CONCAT("$")`,
+  `CONCAT(CONCAT("$"), "[0]")`,
+  `CONCAT(CONCAT(CONCAT("$"), "[0]"), "[0]")`,
+  `CONCAT(CONCAT(CONCAT(CONCAT("$"), "[0]"), "[0]"), ".value")`,
+]
+  return `JSON_SET(${column}, ${result[result.length]}, ${val})`;
+```
+
+```js
+const jqString = '$jsonForm[?Booking Month].value';
+
+const matches = [
+  '$jsonForm',
+  '[?Booking Month]',
+  '.value'
+]
+
+const result = [
+  `CONCAT("$")`,
+  `CONCAT(CONCAT("$"), CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']'))`,
+  `CONCAT(CONCAT(CONCAT("$"), CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"),'one','Booking Month'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(jsonForm, "$"), 'one', 'Booking Month'))-4),']')), ".value")`,
+]
+```
+
+- ~~Change the original jqstring maker so that the first jsonForm value is wrapped around a json_extract.~~
+
+
+  - Add spaces to a string to denote a `CONCAT`.
+  ```js
+  { name: '$firstName $lastName', as: 'fullName' }
+  ===
+  'CONCAT(firstName, " ", lastName) AS fullName'
+
+  [
+    '$firstName',
+    ' ',
+    '$lastName'
+  ]
+  [
+    'firstName',
+    'CONCAT(firstName, " ")',
+    'CONCAT(CONCAT(firstName, " "), lastName)',
+  ]
+  ```
+
+  - Add jQStrings to the `name` param in **JoinObjects**.
+  - Add jQStrings to the `name` param in **WhereObjects** and **HavingObjects**.

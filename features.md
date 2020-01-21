@@ -1,6 +1,6 @@
 # Features TODO
 
-A `count` option.
+~~A `count` option.~~
 
 ```js
 {

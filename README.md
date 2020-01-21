@@ -221,6 +221,9 @@ jsonQL.updateQL({
 }, data);
 ```
 
+**Note**: since version 3.6.0 `updateQL` and `createQL` will also accept an array of data objects.
+Which will build multiple UPDATE querys seperated by `;`.
+
 ## Schema
 
 You'll need a schema for your database, this will prevent anyone from injecting dangerous
@@ -399,8 +402,8 @@ const JoinObject = {
   db: String,
   table: String,
   columns: [ColumnObject],
-  where: [WhereObject],
-  having: [WhereObject],
+  where: [WhereObject/[WhereObject]],
+  having: [WhereObject/[WhereObject]],
   limit: [Number, Number],
   orderBy: {name: String, desc: Boolean},
 }
@@ -428,16 +431,18 @@ const ColumnObject = {
 }
 ```
 
-### WhereObject
+### WhereObject and HavingObject
               
 ```js
 const WhereObject = {
   name: String,
   is: String,
-  isnot: String,
-  or: WhereObject/[WhereObject]
+  isnot: String
 }
 ```
+
+**Note** The `or` param is no longer supported in a **WhereObject**. Instead use an array of **WhereObjects**. 
+See **Where** above. 
 
 # JQString (Json Query Strings)
 

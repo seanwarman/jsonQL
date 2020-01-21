@@ -3,6 +3,7 @@ module.exports = class JsonQL {
     this.schema = schema;
     this.errors = [];
     this.fatalError = false;
+
     this.joinTables = [];
     this.all = false;
 
@@ -61,7 +62,6 @@ module.exports = class JsonQL {
         errors: this.errors
       }
     }
-
     return {
       status: 'success',
       query: selectString,
@@ -178,8 +178,8 @@ module.exports = class JsonQL {
 
   parseData(db, table, data) {
     Object.keys(data).forEach(key => {
-      if(this.keyIsQuery(key)) {
-        this.pushQuery(db, table, key, data[key]);
+      if(this.validJQString(db, table, key)) {
+        this.pushJQString(db, table, key, data[key]);
         return;
       }
 
@@ -223,28 +223,17 @@ module.exports = class JsonQL {
     // let key = '$jsonForm[?Booking Month].value';
 
     let column = this.jColString(db, table, key);
-    let index = this.jInString(db, table, column, key);
 
     column = `${db}.${table}.${column}`;
 
-    if(typeof value === 'string') {
-      value = `'${value}'`;
-    }
-
     value = `IF(
-      JSON_SET(${column}, ${index}, ${value}) IS NOT NULL,
-      JSON_SET(${column}, ${index}, ${value}),
+      ${this.jQSet(db, table, key, value)} IS NOT NULL,
+      ${this.jQSet(db, table, key, value)},
       ${column}
     )`;
 
     this.columns.push(`${column}`);
     this.values.push(value);
-    // IF(
-    //   (JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom') IS NOT NULL),
-    //   JSON_SET(jsonForm, CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4),'].value'),'boom'),
-    //   jsonForm
-    // )
-
   }
 
   pushOrderBy(db, table, orderBy) {
@@ -309,26 +298,24 @@ module.exports = class JsonQL {
   pushNameCols(dbObj, tableObj, nameCols) {
     nameCols.forEach(col => {
       let selectStr = '';
-      if(col.name && this.keyIsQuery(col.name)) {
-        selectStr = this.jExString(dbObj.dbName, tableObj.tableName, col.name);
+      if(col.name && this.validJQString(dbObj.dbName, tableObj.tableName, col.name)) {
+        selectStr = this.jQExtract(dbObj.dbName, tableObj.tableName, col.name);
       } else if(col.name && this.validBySchema(dbObj.dbName, tableObj.tableName, col.name)) {
         selectStr = `${dbObj.dbAlias}.${tableObj.tableAlias}.${col.name}`;
-      }
-      if(col.number && typeof col.number === 'number') {
+      } else if(col.number && typeof col.number === 'number') {
         selectStr = `${col.number}`;
       } else if(col.number) {
         this.errors.push(col.number + ' is not a number');
-      }
-      if(col.string && this.validString(col.string)) {
+      } else if(col.string && this.validString(col.string)) {
         selectStr = `'${col.string}'`;
-      }
-      if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
-        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'all', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
+      } else if(col.jsonExtract && this.validString(col.jsonExtract.search) && this.validString(col.jsonExtract.target)) {
+        selectStr = `JSON_EXTRACT(JSON_EXTRACT(${selectStr}, CONCAT('$[', SUBSTR(JSON_SEARCH(${selectStr}, 'one', '${col.jsonExtract.search}'), 4, 1), ']')), '$.${col.jsonExtract.target}')`;
       }
       if(col.count) {
         selectStr += this.countString(dbObj.dbName, tableObj.tableName, col.count);
       }
-      if(col.as && this.validString(col.as)) {
+      // We can't have an `as` without something before it so also check the selectStr length
+      if(col.as && this.validString(col.as) && selectStr.length > 0) {
         selectStr += ` AS ${col.as}`;
       }
       if(selectStr.length > 0) {
@@ -394,29 +381,25 @@ module.exports = class JsonQL {
   }
 
   pushOrArrWhere(dbObj, tableObj, or) {
-    let whereStr = `(${or.filter(wh => (
+    let whereStr = '';
+    or.forEach((wh, i) => {
 
-      this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name) &&
-      ( this.validString(wh.is) || this.validString(wh.isnot) )
+      if(this.validJQString(dbObj.dbName, tableObj.tableName, wh.name)) {
+        if(i !== 0) {
+          whereStr += ' OR ';
+        }
+        whereStr += `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        return;
+      }
 
-    )).map(wh => {
-
-      let value = 
-        wh.is && typeof wh.is === 'number' ?
-        `= ${wh.is}`
-        :
-        wh.is && typeof wh.is === 'string' ?
-        `= '${wh.is}'`
-        :
-        wh.isnot && typeof wh.isnot === 'number' ?
-        `!= ${wh.isnot}`        :
-        wh.isnot && typeof wh.isnot === 'string' ?
-        `!= '${wh.isnot}'`
-        :
-        '';
-      return `${dbObj.dbName}.${tableObj.tableName}.${wh.name} ${value}`;
-
-    }).join(' OR ')})`;
+      if(this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        if(i !== 0) {
+          whereStr += ' OR ';
+        }
+        whereStr += `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        return;
+      }
+    });
 
     if(whereStr.length > 0) {
       this.where.push(whereStr);
@@ -455,23 +438,29 @@ module.exports = class JsonQL {
 
   pushWhere(dbObj, tableObj, where) {
     where.forEach(wh => {
-      // This check here is a bit out of place but we want to keep 
-      // the old nested OR syntax so there it is.
-      if(!wh.name && wh.or && (wh.or || []).length > 0) {
-        this.pushOrArrWhere(dbObj, tableObj, wh.or);
-        return;
-      }
-      
-      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
-        return;
-      }
+
       let whereStr = '';
-      
-      // Is this right? I don't think you can use alias names in a where...
-      whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
-      if(whereStr.length > 0) {
-        this.where.push(whereStr);
+      if((wh || []).length > 0) {
+        this.pushOrArrWhere(dbObj, tableObj, wh);
+        return;
       }
+
+      if(this.validJQString(dbObj.dbName, tableObj.tableName, wh.name)) {
+        whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        if(whereStr.length > 0) {
+          this.where.push(whereStr);
+          return;
+        }
+      }
+      
+      if(this.validBySchema(dbObj.dbName, tableObj.tableName, wh.name)) {
+        whereStr = `${this.whString(dbObj.dbName, tableObj.tableName, wh)}`;
+        if(whereStr.length > 0) {
+          this.where.push(whereStr);
+          return;
+        }
+      }
+      
     });
   }
 
@@ -497,12 +486,6 @@ module.exports = class JsonQL {
   countString(db, table, count) {
     let whereStr = count.where.map(wh => this.countWhString(db, table, count.db, count.table, wh)).join();
     return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
-  }
-  
-  jExString(db, table, jQString) {
-    let column = this.jColString(db, table, jQString);
-    let index = this.jInString(db, table, column, jQString);
-    return `JSON_EXTRACT(${column}, ${index})`;
   }
 
   jColString(db, table, jQString) {
@@ -567,7 +550,10 @@ module.exports = class JsonQL {
 
   orWhString(db, table, orArr) {
     return `${orArr.filter(or => (
-      (or.name && this.validBySchema(db, table, or.name))
+      (
+        or.name && 
+        (this.validBySchema(db, table, or.name) || this.validJQString(db, table, or.name))
+      )
       &&
       (
         or.isnot && this.validString(or.isnot)
@@ -576,21 +562,26 @@ module.exports = class JsonQL {
       )
     )).map(or => {
 
-    let value = 
-      or.is && typeof or.is === 'number' ?
-      `= ${or.is}`
-      :
-      or.is && typeof or.is === 'string' ?
-      `= '${or.is}'`
-      :
-      or.isnot && typeof or.isnot === 'number' ?
-      `!= ${or.isnot}`        :
-      or.isnot && typeof or.isnot === 'string' ?
-      `!= '${or.isnot}'`
-      :
-      '';
-      
-      return `${db}.${table}.${or.name} ${value}`;
+      let value = 
+        or.is && typeof or.is === 'number' ?
+        `= ${or.is}`
+        :
+        or.is && typeof or.is === 'string' ?
+        `= '${or.is}'`
+        :
+        or.isnot && typeof or.isnot === 'number' ?
+        `!= ${or.isnot}`        :
+        or.isnot && typeof or.isnot === 'string' ?
+        `!= '${or.isnot}'`
+        :
+        '';
+
+      let name = or.name.slice(0,1) === '$' ?
+        this.jQExtract(db, table, or.name)
+        :
+        `${db}.${table}.${or.name}`
+
+      return `${name} ${value}`;
 
     }).join(' OR ')}`
   }
@@ -650,26 +641,26 @@ module.exports = class JsonQL {
   whString(db, table, wh) {
     if(wh.is && !this.validString(wh.is)) return '';
     if(wh.isnot && !this.validString(wh.isnot)) return '';
-    if((wh || []).length > 0 && typeof wh === 'object') {
-      return this.orWhString(db, table, wh);
-    }
-      let value = 
-        wh.is && typeof wh.is === 'number' ?
-        `= ${wh.is}`
-        :
-        wh.is && typeof wh.is === 'string' ?
-        `= '${wh.is}'`
-        :
-        wh.isnot && typeof wh.isnot === 'number' ?
-        `!= ${wh.isnot}`        :
-        wh.isnot && typeof wh.isnot === 'string' ?
-        `!= '${wh.isnot}'`
-        :
-        '';
-    if(!wh.or) {
-      return `${db}.${table}.${wh.name} ${value}`;
-    }
-    return `${db}.${table}.${wh.name} ${value} OR ${this.whString(db, table, wh.or)}`;
+
+    let value = 
+      wh.is && typeof wh.is === 'number' ?
+      `= ${wh.is}`
+      :
+      wh.is && typeof wh.is === 'string' ?
+      `= '${wh.is}'`
+      :
+      wh.isnot && typeof wh.isnot === 'number' ?
+      `!= ${wh.isnot}`        :
+      wh.isnot && typeof wh.isnot === 'string' ?
+      `!= '${wh.isnot}'`
+      :
+      '';
+    let name = this.validJQString(db, table, wh.name) ?
+      this.jQExtract(db, table, wh.name)
+      :
+      `${db}.${table}.${or.name}`
+
+    return `${name} ${value}`;
   }
 
   fnString(db, table, fn, args) {
@@ -809,10 +800,6 @@ module.exports = class JsonQL {
     }
   }
 
-  keyIsQuery(key) {
-    return /^\$/.test(key); 
-  }
-
   // ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
   // ░█▄█░ █▄▄█ █░░ ▀█▀ █░░█ █▄▄█ ░░█░░ ▀█▀ █░░█ █░░█
   // ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
@@ -869,4 +856,68 @@ module.exports = class JsonQL {
     }
   }
 
+  // ░░▀ █▀▀█ █▀▀ ▀▀█▀▀ █▀▀█ ░▀░ █▀▀▄ █▀▀▀ █▀▀
+  // ░░█ █░░█ ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█ ▀▀█
+  // █▄█ ▀▀▀█ ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
+
+  validJQString(db, table, key) {
+    if(/^\$/.test(key)) {
+      const name = key.slice(1, key.search(/[\.\[]/));
+      if(!this.validBySchema(db, table, name)) return false;
+      return true;
+    }
+    return false;
+  }
+
+  jQString(name, string, prevString) {
+    let nameReg = /\$\w+/;
+    let index = /\[\d\]/;
+    let target = /\.\w+/;
+    let search = /\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/;
+
+    if(nameReg.test(string)) {
+      return `CONCAT("$")`;
+    }
+    if(index.test(string)) {
+      // 'index';
+      if(!this.validString(string)) return;
+      return `CONCAT(${prevString}, "${string}")`
+    }
+    if(target.test(string)) {
+      // 'target';
+      if(!this.validString(string)) return;
+      return `CONCAT(${prevString}, "${string}")`
+    }
+    if(search.test(string)) {
+      // 'search';
+      string = string.slice(2, -1);
+      if(!this.validString(string)) return;
+      return `CONCAT(${prevString}, CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(${name}, "$"),'one','${string}'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(${name}, "$"), 'one', '${string}'))-4),']'))`;
+    }
+  }
+
+  jQStringMaker(name, matches) {
+    let result = matches.reduce((arr, match, i) => {
+      return [...arr, this.jQString(name, match, arr[i-1])];
+    }, []);
+
+    return result[result.length - 1];
+  }
+
+  jQExtract(db, table, jQStr) {
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${db}.${table}.${matches[0].slice(1)}`
+    return `JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)})`;
+  }
+
+  jQSet(db, table, jQStr, value) {
+    if(typeof value === 'string') {
+      value = `'${value}'`;
+    }
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${db}.${table}.${matches[0].slice(1)}`
+    return `JSON_SET(${name}, ${this.jQStringMaker(name, matches)}, ${value})`;
+  }
 }
