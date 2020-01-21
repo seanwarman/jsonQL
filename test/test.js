@@ -33,10 +33,19 @@ async function main() {
     console.log('dat: ', dat);
 
     // We're doing a get here so use selectQL and pass it your jsonQL object...
-    let queryObj = jsonQL.createQL({
+    let queryObj = jsonQL.updateQL({
       db: 'bms_campaigns',
       table: 'bookings',
-    }, dat);
+      where: [
+        [
+          {name: 'bookingsKey', is: "67fe209b-fbde-11e9-96d8-69859465d135"},
+          {name: 'bookingsKey', is: "8daefb38-fbdd-11e9-96d8-69859465d135"},
+
+        ]
+      ]
+    }, {
+      dueDate: "2020-01-23T15:15:59+00:00"
+    });
 
     // Check the status of the returned object.
     if (queryObj.status === 'error') {
