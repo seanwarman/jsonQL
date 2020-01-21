@@ -325,38 +325,6 @@ columns: [
 Using `name` in a column or args object will target a column name from your db. If
 you want to put an actual string in then use the `string` param instead.
 
-## JsonExtract (Deprecated - \*use Json Query Strings instead)
-To do a `JSON_EXTRACT` function with a `JSON_SEARCH` on a json column you can search for the object with your value
-using `jsonExtract` in the `columns` array:
-
-```js
-{
-  db: 'booking',
-  table: 'bookings',
-  columns: [
-    {
-      name: 'jsonForm', 
-      as: 'bookingMonth',
-      jsonExtract: {search: 'Booking Month', target: 'value'}
-    }
-  ]
-}
-```
-
-This finds an object in an array of objects by searching for the string 'Booking Month' then 
-returns whatever is assigned to the key called `value`.
-
-So if a `jsonForm` column in the db looks like:
-
-```js
-[
-  {label: 'Booking Month', type: 'input', value: 'December'},
-  {label: 'Keyword',       type: 'input', value: 'Christmas'}
-]
-```
-The 'Booking Month' `search` will return the first object in this array and
-the `target` of `value` will return 'December'.
-
 ## Count
 
 The `count` param in the `ColumnsObject` can be used to count associated records
@@ -405,7 +373,7 @@ const JoinObject = {
   where: [WhereObject/[WhereObject]],
   having: [WhereObject/[WhereObject]],
   limit: [Number, Number],
-  orderBy: {name: String, desc: Boolean},
+  orderBy: {name: String/JQString, desc: Boolean},
 }
 ```
 
@@ -426,7 +394,6 @@ const ColumnObject = {
   count: JoinObject,
   fn: String,
   args: [ColumnObject],
-  jsonExtract: {search: String, target: String}, //< deprecated
   as: String
 }
 ```
@@ -435,9 +402,10 @@ const ColumnObject = {
               
 ```js
 const WhereObject = {
-  name: String,
+  name: String/JQString,
   is: String,
-  isnot: String
+  isnot: String,
+  isbetween: [String/Number, String/Number]
 }
 ```
 
@@ -447,6 +415,7 @@ See **Where** above.
 # JQString (Json Query Strings)
 
 For tables with json type fields you can use a json query string to select specific values in an array.
+All json query strings must start with a `$`, after that they're the same as javascript syntax.
 
 ```js
 {
@@ -459,8 +428,7 @@ For tables with json type fields you can use a json query string to select speci
 }
 ```
 
-All json query strings must start with a `$`.
-You can also search the json column by any string value within using a string (starting with '?') rather than a number.
+You can search the json column by any string value within using a string that starts with a '?'.
 
 ```js
 {
@@ -471,18 +439,22 @@ You can also search the json column by any string value within using a string (s
   ]
 }
 ```
+This finds an object in an array of objects by searching for the string 'Booking Month' then 
+returns whatever is assigned to the key called `value`.
 
-Used in a `where` we can return objects that match specific values in a json.
+So if a `jsonForm` column in the db looks like:
 
 ```js
-selectQL({
-  db: 'campaigns',
-  table: 'bookings',
-  where: [{name: '$jsonForm[0].label', is: '123'}]
-});
+[
+  {label: 'Booking Month', type: 'input', value: 'December'},
+  {label: 'Keyword',       type: 'input', value: 'Christmas'}
+]
 ```
+The `[?Booking Month]` search will return the first object in this array and
+the target of `value` will return 'December'.
 
-Or do a join by specific values in a json field.
+
+You can use **jQStrings** wherever you find a `name` parameter so they even work in joins.
 
 ```js
 selectQL({
@@ -501,7 +473,8 @@ selectQL({
 ```
 
 Json query strings are also compatible with the `data` sent to an `updateQL` function.
-This will only update the `value` param of the first object in the `jsonForm` array that has the string 'Booking Month'.
+Rather than adding the **jQString** as a value, instead it goes in place of the *keyname* of the value you want to update.
+This will only update the `value` param of the first object in the `jsonForm` array to have the string 'Jan'.
 
 ```js
 updateQL({
@@ -509,7 +482,7 @@ updateQL({
   table: 'bookings',
   where: [{name: 'bookingsKey', is: '123'}]
 }, {
-  "$jsonForm[?Booking Month].value": 'Jan'
+  "$jsonForm[0].value": 'Jan'
 });
 ```
 

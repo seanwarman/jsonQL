@@ -16,24 +16,25 @@ async function main() {
     columns: [
       {name: 'bookingName'},
       {name: 'colorLabel'},
-      {name: 'bookingDivKey'},
+      {name: '$jsonForm[0]', as: 'item1'},
       {
-        count: {
-          db: 'Biggly',
-          table: 'uploads',
-          where: [{name: 'bookingsKey', is: 'bookingsKey'}]
-        },
-        as: 'uploadsCount'
-      },
+        fn: 'CONCAT',
+        args: [
+          {
+            name: '$jsonForm[0].label',
+          },
+          {
+            name: '$jsonForm[1].label'
+          },
+          {
+            name: '$jsonForm[1].value'
+          }
+        ],
+        as: 'labelName'
+      }
     ],
-    limit: [0,10],
-    having: [
-      [
-        {name: 'colorLabel', is: 'lightGreen'},
-        {name: 'colorLabel', is: 'lightBlue'}
-      ]
-    ],
-  })
+    limit: [0,5]
+  });
 
   // Check the status of the returned object.
   if (queryObj.status === 'error') {

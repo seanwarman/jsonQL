@@ -252,7 +252,6 @@ module.exports = class JsonQL {
       return;
     }
     this.ascOrDesc = orderBy.desc ? 'DESC' : 'ASC';
-    
   }
 
   pushCols(dbObj, tableObj, columns) {
@@ -584,10 +583,10 @@ module.exports = class JsonQL {
       )).join(' AND ')}`
       :
       '';
-    let name = this.validJQString(db, table, ha.name) ?
-      this.jQExtract(db, table, ha.name)
+    let name = this.validPlainJQString(ha.name) ?
+      this.plainjQExtract(ha.name)
       :
-      `${db}.${table}.${ha.name}`
+      `${ha.name}`
       
     return `${name} ${value}`;
   }
@@ -803,6 +802,16 @@ module.exports = class JsonQL {
     return false;
   }
 
+  validPlainJQString(jQString) {
+    if(/^\$/.test(jQString)) {
+      // Add a match here and check any string inside that begins with a $, that way we can target more than one column in a jqstring.
+      const column = jQString.slice(1, jQString.search(/[\.\[]/));
+      if(!this.validString(column)) return false;
+      return true;
+    }
+    return false;
+  }
+
   jQString(name, string, prevString) {
     let nameReg = /\$\w+/;
     let index = /\[\d\]/;
@@ -838,11 +847,18 @@ module.exports = class JsonQL {
     return result[result.length - 1];
   }
 
+  plainjQExtract(jQStr) {
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${matches[0].slice(1)}`
+    return `JSON_UNQUOTE(JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)}))`;
+  }
+
   jQExtract(db, table, jQStr) {
     const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
     const matches = jQStr.match(regx);
     const name = `${db}.${table}.${matches[0].slice(1)}`
-    return `JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)})`;
+    return `JSON_UNQUOTE(JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)}))`;
   }
 
   jQSet(db, table, jQStr, value) {
