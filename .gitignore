@@ -105,4 +105,5 @@ dist
 
 */**/config.js
 test
+test/**/*
 tags
