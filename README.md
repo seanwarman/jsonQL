@@ -5,7 +5,7 @@ It allows you to build your database query in the frontend like...
 
 ```js
 {
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
@@ -25,15 +25,15 @@ Which get's parsed as the following once it reaches MYSQL...
 
 ```sql
 SELECT
-bms_campaigns.bookings.bookingName,
-bms_campaigns.bookings.bookingsKey,
-bms_campaigns.bookings.assignedUserKey
+campaigns.bookings.bookingName,
+campaigns.bookings.bookingsKey,
+campaigns.bookings.assignedUserKey
 
 FROM
-bms_campaigns.bookings
+campaigns.bookings
 
 WHERE
-bms_campaigns.bookings.createdUserKey = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
+campaigns.bookings.createdUserKey = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
 ```
 
 So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it to replace
@@ -48,7 +48,7 @@ For an OR use an array of `where` items...
 
 ```js
 {
-    db: 'bms_campaigns',
+    db: 'campaigns',
     table: 'bookings',
     columns: [
       {name: 'bookingName'},
@@ -78,7 +78,7 @@ JOINs can be added as part of the `columns` array...
 
 ```js
 {
-  db: 'bms_booking',
+  db: 'booking',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
@@ -86,7 +86,7 @@ JOINs can be added as part of the `columns` array...
     {name: 'bookingsKey'},
     {name: 'assignedUserKey'},
     {join: {
-      db: 'Biggly',
+      db: 'master',
       table: 'partners',
       columns: [
         {name: 'partnerName'}
@@ -101,16 +101,16 @@ Which translates to...
 
 ```sql
 SELECT
-bms_booking.bookings.bookingName,
-bms_booking.bookings.created,
-bms_booking.bookings.bookingsKey,
-bms_booking.bookings.assignedUserKey,
-Biggly.partners.partnerName
+booking.bookings.bookingName,
+booking.bookings.created,
+booking.bookings.bookingsKey,
+booking.bookings.assignedUserKey,
+master.partners.partnerName
 
 FROM
-bms_booking.bookings
+booking.bookings
 
-LEFT JOIN Biggly.partners ON Biggly.partners.createdPartnerKey = bms_booking.bookings.partnerKey
+LEFT JOIN master.partners ON master.partners.createdPartnerKey = booking.bookings.partnerKey
 ```
 
 If you've had any experience with [serverless](https://serverless.com/) lambda functions
@@ -148,7 +148,7 @@ async function example() {
 
   // We're doing a get here so use selectQL and pass it your jsonQL object...
   let queryObj = jsonQL.selectQL({
-    db: 'bms_campaigns',
+    db: 'campaigns',
     table: 'bookings',
     columns: [
       {name: 'bookingName'},
@@ -195,7 +195,7 @@ let data = {
 }
 
 jsonQL.createQL({
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
 }, data);
 ```
@@ -210,7 +210,7 @@ let data = {
 }
 
 jsonQL.updateQL({
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
   where: [
     {
@@ -280,11 +280,11 @@ You can also put an `fn` into a `join`.
 
 ```js
 {
-  db: 'bms_booking',
+  db: 'booking',
   table: 'bookings',
   columns: [
     {join: {
-      db: 'Biggly',
+      db: 'master',
       table: 'users',
       columns: [
         {
@@ -331,7 +331,7 @@ using `jsonExtract` in the `columns` array:
 
 ```js
 {
-  db: 'bms_booking',
+  db: 'booking',
   table: 'bookings',
   columns: [
     {
@@ -364,7 +364,7 @@ from another table by any matching column value.
 
 ```js
 {
-  db: 'bms_booking',
+  db: 'booking',
   table: 'bookings',
   columns: [
     {name: 'bookingName'},
@@ -372,7 +372,7 @@ from another table by any matching column value.
     {name: 'bookingDivKey'},
     {
       count: {
-        db: 'Biggly',
+        db: 'Master',
         table: 'uploads',
         where: [{name: 'bookingsKey', is: 'bookingsKey'}]
       },
@@ -450,7 +450,7 @@ For tables with json type fields you can use a json query string to select speci
 
 ```js
 {
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
   columns: [
     {name: '$jsonStatus[0]', as: 'firstStatus'},
@@ -464,7 +464,7 @@ You can also search the json column by any string value within using a string (s
 
 ```js
 {
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
   columns: [
     {name: '$jsonForm[?Booking Month].value', as: 'bookingMonth'}
@@ -472,11 +472,40 @@ You can also search the json column by any string value within using a string (s
 }
 ```
 
+Used in a `where` we can return objects that match specific values in a json.
+
+```js
+selectQL({
+  db: 'campaigns',
+  table: 'bookings',
+  where: [{name: '$jsonForm[0].label', is: '123'}]
+});
+```
+
+Or do a join by specific values in a json field.
+
+```js
+selectQL({
+  db: 'campaigns',
+  table: 'bookings',
+  columns: [
+    {join: {
+      db: 'campaigns',
+      table: 'bookings',
+      where: [
+        {name: '$jsonStatus[?Draft].selected', is: 'true'}
+      ]
+    }}
+  ]
+});
+```
+
 Json query strings are also compatible with the `data` sent to an `updateQL` function.
+This will only update the `value` param of the first object in the `jsonForm` array that has the string 'Booking Month'.
 
 ```js
 updateQL({
-  db: 'bms_campaigns',
+  db: 'campaigns',
   table: 'bookings',
   where: [{name: 'bookingsKey', is: '123'}]
 }, {
