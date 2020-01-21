@@ -26,8 +26,13 @@ async function main() {
         as: 'uploadsCount'
       },
     ],
-    // limit: [0,10]
-    having: [{name: 'uploadsCount', is: '0'}],
+    limit: [0,10],
+    having: [
+      [
+        {name: 'colorLabel', is: 'lightGreen'},
+        {name: 'colorLabel', is: 'lightBlue'}
+      ]
+    ],
   })
 
   // Check the status of the returned object.

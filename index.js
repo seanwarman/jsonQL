@@ -222,7 +222,7 @@ module.exports = class JsonQL {
   pushQuery(db, table, key, value) {
     // let key = '$jsonForm[?Booking Month].value';
 
-    let column = this.jColString(db, table, key);
+    let column = this.extractColFromJQString(db, table, key);
 
     column = `${db}.${table}.${column}`;
 
@@ -237,11 +237,15 @@ module.exports = class JsonQL {
   }
 
   pushOrderBy(db, table, orderBy) {
-    if(!this.validBySchema(db, table, orderBy.name)) {
+    if(this.validJQString(db, table, orderBy.name)) {
+      this.orderBy = this.jQExtract(db, table, orderBy.name);
+    } else if(this.validBySchema(db, table, orderBy.name)) {
+      this.orderBy = orderBy.name;
+    }
+
+    if(this.orderBy.length === 0) {
       return;
     }
-    this.orderBy = orderBy.name;
-
 
     if(orderBy.desc && typeof orderBy.desc !== 'boolean') {
       this.errors.push('orderBy.desc must be a Boolean type value.')
@@ -488,162 +492,27 @@ module.exports = class JsonQL {
     return `(SELECT COUNT(*) FROM ${count.db}.${count.table} WHERE ${whereStr})`;
   }
 
-  jColString(db, table, jQString) {
-    let column = jQString.slice(1, jQString.indexOf('['));
-    if(!this.validBySchema(db, table, column)) return;
-    return column;
-  }
-
-  jInString(db, table, column, jQString) {
-    if(!this.validBySchema(db, table, column)) return;
-    let index = jQString.slice(jQString.indexOf('[') + 1, jQString.indexOf(']'));
-    let startBracket = '$[';
-    let endBracketAndIfValue = jQString.slice(jQString.indexOf(']'), jQString.length);
-
-    column = `${db}.${table}.${column}`;
-    if(/^\?/.test(index)) {
-      // Remove the ? from the search term index.
-      index = index.slice(1, index.length);
-      index = `CONCAT('${startBracket}',SUBSTR(JSON_SEARCH(${column},'one','${index}'),4,LOCATE(']',JSON_SEARCH(${column},'one','${index}'))-4),'${endBracketAndIfValue}')`;
-      // CONCAT('$[',SUBSTR(JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'), 4,  LOCATE(']', JSON_SEARCH(jsonForm, 'one', 'Bigg Spend'))-4)
-    } else if(!this.validIndex(index)) {
-      return;
-    } else {
-      // Put the brackets back for the query.
-      index = `'${startBracket}${index}${endBracketAndIfValue}'`;
-    }
-    return index;
-  }
-
-  haString(ha) {
-    if(ha.name && !this.validString(ha.name)) {
-      return '';
-    }
-    if(ha.isnot && !this.validString(ha.isnot)) {
-      return '';
-    }
-    if(ha.is && !this.validString(ha.is)) {
-      return '';
-    }
-    if((ha || []).length > 0 && typeof ha === 'object') {
-      return this.orHaString(ha);
-    }
-    let value = 
-      ha.is && typeof ha.is === 'number' ?
-      `= ${ha.is}`
-      :
-      ha.is && typeof ha.is === 'string' ?
-      `= '${ha.is}'`
-      :
-      ha.isnot && typeof ha.isnot === 'number' ?
-      `!= ${ha.isnot}`        :
-      ha.isnot && typeof ha.isnot === 'string' ?
-      `!= '${ha.isnot}'`
-      :
-      ha.isbetween ?
-      `BETWEEN ${ha.isbetween.map(val => (
-        typeof val === 'string' ?
-        `'${val}'`
-        :
-        val
-      )).join(' AND ')}`
-      :
-      '';
-      
-    if(!ha.or) {
-      return `${ha.name} ${value}`;
-    }
-    return `${ha.name} ${value} OR ${this.haString(ha.or)}`;
-  }
-
   orWhString(db, table, orArr) {
     return `${orArr.filter(or => (
-      (
-        or.name && 
-        (this.validBySchema(db, table, or.name) || this.validJQString(db, table, or.name))
-      )
-      &&
-      (
-        or.isnot && this.validString(or.isnot)
-        ||
-        or.is && this.validString(or.is)
-      )
+      or.name && 
+      (this.validBySchema(db, table, or.name) || this.validJQString(db, table, or.name))
     )).map(or => {
 
-      let value = 
-        or.is && typeof or.is === 'number' ?
-        `= ${or.is}`
-        :
-        or.is && typeof or.is === 'string' ?
-        `= '${or.is}'`
-        :
-        or.isnot && typeof or.isnot === 'number' ?
-        `!= ${or.isnot}`        :
-        or.isnot && typeof or.isnot === 'string' ?
-        `!= '${or.isnot}'`
-        :
-        '';
-
-      let name = or.name.slice(0,1) === '$' ?
-        this.jQExtract(db, table, or.name)
-        :
-        `${db}.${table}.${or.name}`
-
-      return `${name} ${value}`;
+      return this.whString(db, table, or);
 
     }).join(' OR ')}`
   }
 
   orHaString(orArr) {
     return `${orArr.filter(or => (
-      (or.name && this.validString(or.name))
-      &&
-      (
-        or.isnot && this.validString(or.isnot)
-        ||
-        or.is && this.validString(or.is)
-      )
+
+      or.name && this.validString(or.name)
+
     )).map(or => {
 
-    let value = 
-      or.is && typeof or.is === 'number' ?
-      `= ${or.is}`
-      :
-      or.is && typeof or.is === 'string' ?
-      `= '${or.is}'`
-      :
-      or.isnot && typeof or.isnot === 'number' ?
-      `!= ${or.isnot}`        :
-      or.isnot && typeof or.isnot === 'string' ?
-      `!= '${or.isnot}'`
-      :
-      '';
-      
-      return `${or.name} ${value}`;
+      return this.haString(or);
 
     }).join(' OR ')}`
-  }
-
-  countWhString(inDb, inTable, whDb, whTable, wh) {
-    if(wh.is && !this.validString(wh.is)) return '';
-    if(wh.isnot && !this.validString(wh.isnot)) return '';
-    let value = 
-      wh.is && typeof wh.is === 'number' ?
-      `= ${wh.is}`
-      :
-      wh.is && typeof wh.is === 'string' ?
-      `= '${wh.is}'`
-      :
-      wh.isnot && typeof wh.isnot === 'number' ?
-      `!= ${wh.isnot}`        :
-      wh.isnot && typeof wh.isnot === 'string' ?
-      `!= '${wh.isnot}'`
-      :
-      '';
-    if(!wh.or) {
-      return `${whDb}.${whTable}.${wh.name} ${value}`;
-    }
-    return `${whDb}.${whTable}.${wh.name} ${value} OR ${this.countWhString(inDb, inTable, whDb, whTable, wh.or)}`;
   }
 
   whString(db, table, wh) {
@@ -653,15 +522,15 @@ module.exports = class JsonQL {
     if(wh.isbetween && !this.validString(wh.isbetween[1])) return '';
 
     let value = 
-      wh.is && typeof wh.is === 'number' ?
+      typeof wh.is === 'number' ?
       `= ${wh.is}`
       :
-      wh.is && typeof wh.is === 'string' ?
+      typeof wh.is === 'string' ?
       `= '${wh.is}'`
       :
-      wh.isnot && typeof wh.isnot === 'number' ?
+      typeof wh.isnot === 'number' ?
       `!= ${wh.isnot}`        :
-      wh.isnot && typeof wh.isnot === 'string' ?
+      typeof wh.isnot === 'string' ?
       `!= '${wh.isnot}'`
       :
       wh.isbetween ?
@@ -681,10 +550,54 @@ module.exports = class JsonQL {
     return `${name} ${value}`;
   }
 
+  haString(ha) {
+    if(ha.name && !this.validString(ha.name)) {
+      return '';
+    }
+    if(ha.isnot && !this.validString(ha.isnot)) {
+      return '';
+    }
+    if(ha.is && !this.validString(ha.is)) {
+      return '';
+    }
+    if((ha || []).length > 0 && typeof ha === 'object') {
+      return this.orHaString(ha);
+    }
+    let value = 
+      typeof ha.is === 'number' ?
+      `= ${ha.is}`
+      :
+      typeof ha.is === 'string' ?
+      `= '${ha.is}'`
+      :
+      typeof ha.isnot === 'number' ?
+      `!= ${ha.isnot}`        :
+      typeof ha.isnot === 'string' ?
+      `!= '${ha.isnot}'`
+      :
+      ha.isbetween ?
+      `BETWEEN ${ha.isbetween.map(val => (
+        typeof val === 'string' ?
+        `'${val}'`
+        :
+        val
+      )).join(' AND ')}`
+      :
+      '';
+    let name = this.validJQString(db, table, ha.name) ?
+      this.jQExtract(db, table, ha.name)
+      :
+      `${db}.${table}.${ha.name}`
+      
+    return `${name} ${value}`;
+  }
+
   fnString(db, table, fn, args) {
     if(!this.validString(fn)) return '';
     return `${fn}(${args.map(arg => {
-      if(arg.name) {
+      if(this.validJQString(db, table, arg.name)) {
+        return this.jQExtract(db, table, arg.name);
+      } else if(arg.name) {
         return `${db}.${table}.${arg.name}`; 
       }
       if(arg.number && typeof arg.number === 'number') {
@@ -874,10 +787,17 @@ module.exports = class JsonQL {
   // ░░█ █░░█ ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█ ▀▀█
   // █▄█ ▀▀▀█ ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
 
-  validJQString(db, table, key) {
-    if(/^\$/.test(key)) {
-      const name = key.slice(1, key.search(/[\.\[]/));
-      if(!this.validBySchema(db, table, name)) return false;
+  extractColFromJQString(db, table, jQString) {
+    let column = jQString.slice(1, jQString.search(/[\.\[]/));
+    if(!this.validBySchema(db, table, column)) return;
+    return column;
+  }
+
+  validJQString(db, table, jQString) {
+    if(/^\$/.test(jQString)) {
+      // Add a match here and check any string inside that begins with a $, that way we can target more than one column in a jqstring.
+      const column = jQString.slice(1, jQString.search(/[\.\[]/));
+      if(!this.validBySchema(db, table, column)) return false;
       return true;
     }
     return false;
