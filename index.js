@@ -492,10 +492,20 @@ module.exports = class JsonQL {
   }
 
   orWhString(db, table, orArr) {
-    return `${orArr.filter(or => (
-      or.name && 
-      (this.validBySchema(db, table, or.name) || this.validJQString(db, table, or.name))
-    )).map(or => {
+    return `${orArr.filter(or => {
+      if(or.name) {
+        if(this.validVName(db, table, or.name)) {
+          return true;
+        }
+        if(this.validJQString(db, table, or.name)) {
+          return true;
+        }
+        if(this.validBySchema(db, table, or.name)) {
+          return true;
+        }
+        return false;
+      }
+    }).map(or => {
 
       return this.whString(db, table, or);
 
@@ -520,22 +530,26 @@ module.exports = class JsonQL {
     if(wh.isbetween && !this.validString(wh.isbetween[0])) return '';
     if(wh.isbetween && !this.validString(wh.isbetween[1])) return '';
 
+    if((wh || []).length > 0 && typeof wh === 'object') {
+      return this.orWhString(wh);
+    }
+
     let value = 
       typeof wh.is === 'number' ?
       `= ${wh.is}`
       :
       typeof wh.is === 'string' ?
-      `= '${wh.is}'`
+      `= ${this.vNameOrPlainString(wh.is, db, table)}`
       :
       typeof wh.isnot === 'number' ?
       `!= ${wh.isnot}`        :
       typeof wh.isnot === 'string' ?
-      `!= '${wh.isnot}'`
+      `!= ${this.vNameOrPlainString(wh.isnot, db, table)}`
       :
       wh.isbetween ?
       `BETWEEN ${wh.isbetween.map(val => (
         typeof val === 'string' ?
-        `'${val}'`
+        this.vNameOrPlainString(val, db, table)
         :
         val
       )).join(' AND ')}`
@@ -567,17 +581,17 @@ module.exports = class JsonQL {
       `= ${ha.is}`
       :
       typeof ha.is === 'string' ?
-      `= '${ha.is}'`
+      `= ${this.vNameOrPlainString(ha.is)}'`
       :
       typeof ha.isnot === 'number' ?
       `!= ${ha.isnot}`        :
       typeof ha.isnot === 'string' ?
-      `!= '${ha.isnot}'`
+      `!= ${this.vNameOrPlainString(ha.isnot)}`
       :
       ha.isbetween ?
       `BETWEEN ${ha.isbetween.map(val => (
         typeof val === 'string' ?
-        `'${val}'`
+        this.vNameOrPlainString(val)
         :
         val
       )).join(' AND ')}`
@@ -747,7 +761,7 @@ module.exports = class JsonQL {
     if(!this.schema) {
       this.errors.push('A schema must be provided in order to use JsonQL')
       this.fatalError = true;
-      return;
+      return false;
     }
     if(!db || (db || '').length === 0) {
       this.errors.push('No db name provided');
@@ -869,5 +883,32 @@ module.exports = class JsonQL {
     const matches = jQStr.match(regx);
     const name = `${db}.${table}.${matches[0].slice(1)}`
     return `JSON_SET(${name}, ${this.jQStringMaker(name, matches)}, ${value})`;
+  }
+
+  // ▀█░█▀ █▀▀▄ █▀▀█ █▀▄▀█ █▀▀ █▀▀
+  // ░█▄█░ █░░█ █▄▄█ █░▀░█ █▀▀ ▀▀█
+  // ░░▀░░ ▀░░▀ ▀░░▀ ▀░░░▀ ▀▀▀ ▀▀▀
+
+  vNameOrPlainString(string, db, table) {
+    let regx = /^_/g
+    if(regx.test(string) && db && table) {
+      return `${db}.${table}.${string.slice(1)}`;
+    }
+    if(regx.test(string) && table) {
+      return `${table}.${string.slice(1)}`;
+    }
+    if(regx.test(string)) {
+      return string.slice(1);
+    }
+    return `'${string}'`;
+  }
+
+  validVName(db, table, string) {
+    // Just test for the first vname for now.
+    let regx = /^_\w+/g
+    if(regx.test(string)) {
+      return this.validBySchema(db, table, string.slice(1));
+    }
+    return false;
   }
 }

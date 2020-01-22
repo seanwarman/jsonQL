@@ -3,6 +3,31 @@ const connection = require('./config');
 const schema = require('../../bms-api/jsonql/schema/admin');
 const JsonQL = require('../');
 
+//     SELECT 
+//
+//     page.name as Page,
+//     page.key as PageKey,
+//     round(page.override_price/30,2) as OverridePrice
+//     site.name as Client,
+//     (select name from packages where id = page.selected_package_id) as Package,
+//
+//     (select count(page_key) from page_view where created between '" . $from . "' and '" . $to. "' and page_key = page.key) as Visits,
+//
+//     (select count(page_key) from formfill where created between '" . $from . "' and '" . $to. "' and page_key = page.key) as Form,
+//     (select count(page_key) from click_email where created between '" . $from . "' and '" . $to. "' and page_key = page.key) as Email,
+//     (select count(page_key) from click_phone where created between '" . $from . "' and '" . $to. "' and page_key = page.key) as ClickToCall,
+//     (select count(page_key) from `call` where call_start between '" . $from . "' and '" . $to. "' and page_key = page.key) as TrackedCall,
+//     (select round(rrp/30,2) from packages where id = page.selected_package_id) as RetailPrice,
+//
+//     FROM page
+//
+//     join site on site.key = page.site_key
+//     join client on client.key = site.client_key
+//
+//     WHERE
+//
+//     page.status = 'Active' AND page.campaign is not null
+//     order by client.name, site.name, page.name";
 async function main() {
 
   // Connect to mysql...
@@ -11,29 +36,38 @@ async function main() {
   const jsonQL = new JsonQL(schema);
 
   let queryObj = jsonQL.selectQL({
-    db: 'bms_booking',
-    table: 'bookings',
+    db: 'bms_leadsbox',
+    table: 'page',
     columns: [
-      {name: 'bookingName'},
-      {name: 'colorLabel'},
-      {name: '$jsonForm[0]', as: 'item1'},
+      {name: 'name', as: 'Page'},
+      {name: 'key', as: 'PageKey'},
       {
-        fn: 'CONCAT',
-        args: [
-          {
-            name: '$jsonForm[0].label',
-          },
-          {
-            name: '$jsonForm[1].label'
-          },
-          {
-            name: '$jsonForm[1].value'
-          }
-        ],
-        as: 'labelName'
-      }
+        fn: 'ROUND', 
+        args: [{name: 'override_price/30'}, {number: 2}],
+        as: 'OverridePrice'
+      },
+      {join: {
+        db: 'bms_leadsbox',
+        table: 'site',
+        columns: [{name: 'name', as: 'Client'}],
+        where: [{name: 'site_key', is: '_key'}]
+      }},
+      {join: {
+        db: 'bms_leadsbox',
+        table: 'packages',
+        columns: [{name: 'name', as: 'Package'}],
+        where: [{name: 'selected_package_id', is: '_id'}]
+      }},
+      {count: {
+        db: 'bms_leadsbox',
+        table: 'page_view',
+        where: [
+          {name: 'page_key', is: '_key'}
+        ]
+      }, as: 'Visits'}
     ],
-    limit: [0,5]
+    // limit: [0,5]
+    where: [{name: 'key', is: 'CM4N8jJVDL'}]
   });
 
   // Check the status of the returned object.
