@@ -615,7 +615,7 @@ module.exports = class JsonQL {
       `= ${ha.is}`
       :
       typeof ha.is === 'string' ?
-      `= ${this.vNameOrPlainString(ha.is)}'`
+      `= ${this.vNameOrPlainString(ha.is)}`
       :
       typeof ha.isnot === 'number' ?
       `!= ${ha.isnot}`        :
@@ -924,25 +924,21 @@ module.exports = class JsonQL {
   // ░░▀░░ ▀░░▀ ▀░░▀ ▀░░░▀ ▀▀▀ ▀▀▀
 
   vNameOrPlainString(string, db, table) {
-    let regx = /^_/g
-    if(regx.test(string) && db && table) {
-      if(!this.validVName(db, table, string)) return '';
-      return `${db}.${table}.${string.slice(1)}`;
-    }
-    if(regx.test(string) && table) {
-      return `${table}.${string.slice(1)}`;
-    }
+    let regx = /^'.+'$/g
     if(regx.test(string)) {
-      return string.slice(1);
+      if(!this.validString(string)) return '';
+      return `${string}`;
+    } else if (this.validBySchema(db, table, string)) {
+      return `${db}.${table}.${string}`;
     }
-    return `'${string}'`;
+    return '';
   }
 
   validVName(db, table, string) {
     // Just test for the first vname for now.
-    let regx = /^_\w+/g
+    let regx = /^'.+'$/g
     if(regx.test(string)) {
-      return this.validBySchema(db, table, string.slice(1));
+      return this.validString(string);
     }
     return false;
   }
