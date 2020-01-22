@@ -329,30 +329,29 @@ module.exports = class JsonQL {
 
   pushJoinCols(dbObj, tableObj, joinCols) {
     joinCols.forEach(col => {
-      if(!this.validBySchema(dbObj.dbName, tableObj.tableName, col.join.where[0].name)) {
-        return;
-      }
-      if(col.join.where[0].isnot) {
-        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].isnot)) return;
-      }
-      if(col.join.where[0].is) {
-        if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].is)) return;
-      }
-
-      let joinStr = '';
+      // if(!this.validBySchema(dbObj.dbName, tableObj.tableName, col.join.where[0].name)) {
+      //   return;
+      // }
+      // if(col.join.where[0].isnot) {
+      //   if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].isnot)) return;
+      // }
+      // if(col.join.where[0].is) {
+      //   if(!this.validBySchema(col.join.db, col.join.table, col.join.where[0].is)) return;
+      // }
       let aliasTableName = this.aliasReplicaTableNames(col.join.table);
       let aliasString = '';
-
+  
       if(col.join.table !== aliasTableName) {
         aliasString = ` AS ${aliasTableName}`;
       }
-      if(col.join.where[0].isnot) {
-        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} != ${col.join.db}.${aliasTableName}.${col.join.where[0].isnot}`;
-      }
-      if(col.join.where[0].is) {
-        joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${dbObj.dbName}.${tableObj.tableName}.${col.join.where[0].name} = ${col.join.db}.${aliasTableName}.${col.join.where[0].is}`;
-      }
-
+      let joinStr = `${col.join.db}.${col.join.table}${aliasString} ON ${this.joinWhString(
+        dbObj.dbName,
+        tableObj.tableName,
+        col.join.db, 
+        aliasTableName,
+        col.join.where
+      ).join(' AND ')}`;
+      
       if(joinStr.length > 0) {
         this.join.push(joinStr);
       }
@@ -363,6 +362,41 @@ module.exports = class JsonQL {
         col.join.columns
       );
     });
+  }
+
+  joinWhString(
+    fromDB,
+    fromTable,
+    joinDB,
+    joinTableOrAlias,
+    where
+  ) {
+
+    return where.map(wh => {
+      if(wh.length && typeof wh === 'object') {
+        return this.joinWhString(
+          fromDB,
+          fromTable,
+          joinDB,
+          joinTableOrAlias,
+          wh
+        ).join(' OR ');
+      }
+      if(wh.isnot) {
+        return `${fromDB}.${fromTable}.${wh.name} != ${this.vNameOrPlainString(wh.isnot, joinDB, joinTableOrAlias)}`;
+      }
+      if(wh.is) {
+        return `${fromDB}.${fromTable}.${wh.name} = ${this.vNameOrPlainString(wh.is, joinDB, joinTableOrAlias)}`;
+      }
+      if(wh.isbetween) {
+        return `${fromDB}.${fromTable}.${wh.name} BETWEEN ${wh.isbetween.map(val => (
+          typeof val === 'string' ?
+          this.vNameOrPlainString(val, joinDB)
+          :
+          val
+        )).join(' AND ')}`
+      }
+    })
   }
 
   pushFnCols(dbObj, tableObj, fnCols) {
@@ -892,6 +926,7 @@ module.exports = class JsonQL {
   vNameOrPlainString(string, db, table) {
     let regx = /^_/g
     if(regx.test(string) && db && table) {
+      if(!this.validVName(db, table, string)) return '';
       return `${db}.${table}.${string.slice(1)}`;
     }
     if(regx.test(string) && table) {

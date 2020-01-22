@@ -56,7 +56,11 @@ async function main() {
         db: 'bms_leadsbox',
         table: 'packages',
         columns: [{name: 'name', as: 'Package'}],
-        where: [{name: 'selected_package_id', is: '_id'}]
+        where: [
+          {name: 'selected_package_id', is: '_id'},
+          // This won't work :( the name here is alwats the parent column but here we need it to be the join column 
+          {name: 'created', isbetween: ['2018', '2019']}
+        ]
       }},
       {count: {
         db: 'bms_leadsbox',
@@ -67,7 +71,7 @@ async function main() {
       }, as: 'Visits'}
     ],
     // limit: [0,5]
-    where: [{name: 'key', is: 'CM4N8jJVDL'}]
+    // where: [{name: 'key', is: 'CM4N8jJVDL'}]
   });
 
   // Check the status of the returned object.
