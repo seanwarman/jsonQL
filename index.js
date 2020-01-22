@@ -383,15 +383,15 @@ module.exports = class JsonQL {
         ).join(' OR ');
       }
       if(wh.isnot) {
-        return `${fromDB}.${fromTable}.${wh.name} != ${this.vNameOrPlainString(wh.isnot, joinDB, joinTableOrAlias)}`;
+        return `${fromDB}.${fromTable}.${wh.name} != ${this.nameOrPlainString(wh.isnot, joinDB, joinTableOrAlias)}`;
       }
       if(wh.is) {
-        return `${fromDB}.${fromTable}.${wh.name} = ${this.vNameOrPlainString(wh.is, joinDB, joinTableOrAlias)}`;
+        return `${fromDB}.${fromTable}.${wh.name} = ${this.nameOrPlainString(wh.is, joinDB, joinTableOrAlias)}`;
       }
       if(wh.isbetween) {
         return `${fromDB}.${fromTable}.${wh.name} BETWEEN ${wh.isbetween.map(val => (
           typeof val === 'string' ?
-          this.vNameOrPlainString(val, joinDB)
+          this.nameOrPlainString(val, joinDB)
           :
           val
         )).join(' AND ')}`
@@ -452,16 +452,11 @@ module.exports = class JsonQL {
     )).map(ha => {
 
       let value = 
-        ha.is && typeof ha.is === 'number' ?
+        ha.is ?
         `= ${ha.is}`
         :
-        ha.is && typeof ha.is === 'string' ?
-        `= '${ha.is}'`
-        :
-        ha.isnot && typeof ha.isnot === 'number' ?
+        ha.isnot ?
         `!= ${ha.isnot}`        :
-        ha.isnot && typeof ha.isnot === 'string' ?
-        `!= '${ha.isnot}'`
         :
         '';
       return `${ha.name} ${value}`;
@@ -528,7 +523,7 @@ module.exports = class JsonQL {
   orWhString(db, table, orArr) {
     return `${orArr.filter(or => {
       if(or.name) {
-        if(this.validVName(db, table, or.name)) {
+        if(this.validName(db, table, or.name)) {
           return true;
         }
         if(this.validJQString(db, table, or.name)) {
@@ -568,31 +563,24 @@ module.exports = class JsonQL {
       return this.orWhString(wh);
     }
 
-    let value = 
-      typeof wh.is === 'number' ?
-      `= ${wh.is}`
-      :
-      typeof wh.is === 'string' ?
-      `= ${this.vNameOrPlainString(wh.is, db, table)}`
-      :
-      typeof wh.isnot === 'number' ?
-      `!= ${wh.isnot}`        :
-      typeof wh.isnot === 'string' ?
-      `!= ${this.vNameOrPlainString(wh.isnot, db, table)}`
-      :
-      wh.isbetween ?
-      `BETWEEN ${wh.isbetween.map(val => (
-        typeof val === 'string' ?
-        this.vNameOrPlainString(val, db, table)
-        :
-        val
-      )).join(' AND ')}`
-      :
-      '';
     let name = this.validJQString(db, table, wh.name) ?
       this.jQExtract(db, table, wh.name)
       :
       `${db}.${table}.${wh.name}`
+
+    let value = 
+      wh.is ?
+      `= ${this.nameOrPlainString(wh.is, db, table)}`
+      :
+      wh.isnot ?
+      `!= ${this.nameOrPlainString(wh.isnot, db, table)}`
+      :
+      wh.isbetween ?
+      `BETWEEN ${wh.isbetween.map(val => (
+        this.nameOrPlainString(val, db, table)
+      )).join(' AND ')}`
+      :
+      '';
 
     return `${name} ${value}`;
   }
@@ -601,40 +589,29 @@ module.exports = class JsonQL {
     if(ha.name && !this.validString(ha.name)) {
       return '';
     }
-    if(ha.isnot && !this.validString(ha.isnot)) {
-      return '';
-    }
-    if(ha.is && !this.validString(ha.is)) {
-      return '';
-    }
     if((ha || []).length > 0 && typeof ha === 'object') {
       return this.orHaString(ha);
     }
-    let value = 
-      typeof ha.is === 'number' ?
-      `= ${ha.is}`
-      :
-      typeof ha.is === 'string' ?
-      `= ${this.vNameOrPlainString(ha.is)}`
-      :
-      typeof ha.isnot === 'number' ?
-      `!= ${ha.isnot}`        :
-      typeof ha.isnot === 'string' ?
-      `!= ${this.vNameOrPlainString(ha.isnot)}`
-      :
-      ha.isbetween ?
-      `BETWEEN ${ha.isbetween.map(val => (
-        typeof val === 'string' ?
-        this.vNameOrPlainString(val)
-        :
-        val
-      )).join(' AND ')}`
-      :
-      '';
+
     let name = this.validPlainJQString(ha.name) ?
       this.plainjQExtract(ha.name)
       :
       `${ha.name}`
+
+    let value = 
+      this.validString(ha.is) ?
+      `= ${ha.is}`
+      :
+      this.validString(ha.isnot) ?
+      `!= ${ha.isnot}`
+      :
+      ha.isbetween ?
+      `BETWEEN ${ha.isbetween.map(val => (
+        this.validString(val) &&
+        val
+      )).join(' AND ')}`
+      :
+      '';
       
     return `${name} ${value}`;
   }
@@ -645,7 +622,8 @@ module.exports = class JsonQL {
       if(this.validJQString(db, table, arg.name)) {
         return this.jQExtract(db, table, arg.name);
       } else if(arg.name) {
-        return `${db}.${table}.${arg.name}`; 
+        
+        return this.nameOrPlainString(arg.name, db, table);
       }
       if(arg.number && typeof arg.number === 'number') {
         return `${arg.number}`; 
@@ -820,7 +798,7 @@ module.exports = class JsonQL {
   }
 
   validString(string) {
-    const regex = /(drop )|;|(update )( truncate)/gi;
+    const regex = /(drop )|;|(update )|( truncate)/gi;
     if(regex.test(string)) {
       this.errors.push('The string \'' + string + '\' is not allowed');
       this.fatalError = true;
@@ -923,20 +901,21 @@ module.exports = class JsonQL {
   // ░█▄█░ █░░█ █▄▄█ █░▀░█ █▀▀ ▀▀█
   // ░░▀░░ ▀░░▀ ▀░░▀ ▀░░░▀ ▀▀▀ ▀▀▀
 
-  vNameOrPlainString(string, db, table) {
-    let regx = /^'.+'$/g
-    if(regx.test(string)) {
-      if(!this.validString(string)) return '';
-      return `${string}`;
-    } else if (this.validBySchema(db, table, string)) {
-      return `${db}.${table}.${string}`;
+  nameOrPlainString(value, db, table) {
+    if(typeof value === 'number') {
+      return value;
+    }
+    let regx = /^['"`].+['"`]$/g
+    if(regx.test(value) && this.validString(value)) {
+      return `${value}`;
+    } else if (this.validBySchema(db, table, value)) {
+      return `${db}.${table}.${value}`;
     }
     return '';
   }
 
-  validVName(db, table, string) {
-    // Just test for the first vname for now.
-    let regx = /^'.+'$/g
+  validName(db, table, string) {
+    let regx = /^['"`].+['"`]$/g
     if(regx.test(string)) {
       return this.validString(string);
     }

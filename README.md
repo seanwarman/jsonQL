@@ -15,7 +15,7 @@ It allows you to build your database query in the frontend like...
   where: [
     {
       name: 'createdUserKey',
-      is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
+      is: '"cafc9f20-deae-11e9-be90-7deb20e96c9e"',
     },
   ]
 }
@@ -33,7 +33,7 @@ FROM
 campaigns.bookings
 
 WHERE
-campaigns.bookings.createdUserKey = 'cafc9f20-deae-11e9-be90-7deb20e96c9e'
+campaigns.bookings.createdUserKey = "cafc9f20-deae-11e9-be90-7deb20e96c9e"
 ```
 
 So all we need is one **GET** endpoint that accepts **jsonQL** objects and we can use it to replace
@@ -58,15 +58,15 @@ For an OR use an array of `where` items...
     where: [
       {
         name: 'createdUserKey',
-        is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
+        is: '"cafc9f20-deae-11e9-be90-7deb20e96c9e"',
       },
       // ...AND
       [
-        { name: 'bookingsKey', is: '123', },
+        { name: 'bookingsKey', is: '"123"', },
         // ...OR
-        { name: 'bookingsKey', is: '321' },
+        { name: 'bookingsKey', is: '"321"' },
         // ...OR
-        { name: 'bookingsKey', is: 'd03563a1-2e2c-11ea-b3ec-a1387ad1100d' }
+        { name: 'bookingsKey', is: '"d03563a1-2e2c-11ea-b3ec-a1387ad1100d"' }
       ]
     ]
   },
@@ -158,7 +158,7 @@ async function example() {
     where: [
       {
         name: 'createdUserKey',
-        is: 'cafc9f20-deae-11e9-be90-7deb20e96c9e',
+        is: '"cafc9f20-deae-11e9-be90-7deb20e96c9e"',
       },
     ]
   });
@@ -215,7 +215,7 @@ jsonQL.updateQL({
   where: [
     {
       name: 'bookingsKey',
-      is: '12345'
+      is: '"12345"'
     }
   ]
 }, data);
@@ -269,7 +269,7 @@ To use slq functions you can use the fn String.
 columns: [
   {
     fn: 'REPLACE',
-    args: [{name: 'bookingName'}, {string: '%20'}, {string: ' '}],
+    args: [{name: 'bookingName'}, {name: '"%20"'}, {name: '" "'}],
     as: 'bookingNameFormatted'
   },
 ],
@@ -289,7 +289,7 @@ You can also put an `fn` into a `join`.
       columns: [
         {
           fn: 'CONCAT',
-          args: [{name: 'firstName'}, {string: ' '}, {name: 'lastName'}],
+          args: [{name: 'firstName'}, {name: '" "'}, {name: 'lastName'}],
           as: 'fullName'
         }
       ],
@@ -310,12 +310,12 @@ columns: [
         fn: 'REPLACE',
         args: [
           {name: 'bookingName'},
-          {string: '%2F'},
-          {string: '/'},
+          {name: '"%2F"'},
+          {name: '"/"'},
         ]
       }, 
-      {string: '%20'}, 
-      {string: ' '}
+      {name: '"%20"'}, 
+      {name: '" "'}
     ],
     as: 'fullName'
   }
@@ -347,7 +347,7 @@ from another table by any matching column value.
       as: 'uploadsCount'
     },
   ],
-  having: [{name: 'uploadsCount', is: '2'}],
+  having: [{name: 'uploadsCount', is: 2}],
 }
 ```
 
@@ -387,9 +387,7 @@ This works because JsonQL is recursive. You can put a `ColumnObject` inside anot
 
 ```js
 const ColumnObject = {
-  name: String/JQString,
-  string: String,
-  number: Number,
+  name: String/Number/JQString,
   join: JoinObject,
   count: JoinObject,
   fn: String,
@@ -402,9 +400,9 @@ const ColumnObject = {
               
 ```js
 const WhereObject = {
-  name: String/JQString,
-  is: String,
-  isnot: String,
+  name: String/Number/JQString,
+  is: String/Number,
+  isnot: String/Number,
   isbetween: [String/Number, String/Number]
 }
 ```
@@ -465,7 +463,7 @@ selectQL({
       db: 'campaigns',
       table: 'bookings',
       where: [
-        {name: '$jsonStatus[?Draft].selected', is: 'true'}
+        {name: '$jsonStatus[?Draft].selected', is: 1}
       ]
     }}
   ]
@@ -480,7 +478,7 @@ This will only update the `value` param of the first object in the `jsonForm` ar
 updateQL({
   db: 'campaigns',
   table: 'bookings',
-  where: [{name: 'bookingsKey', is: '123'}]
+  where: [{name: 'bookingsKey', is: '"123"'}]
 }, {
   "$jsonForm[0].value": 'Jan'
 });
