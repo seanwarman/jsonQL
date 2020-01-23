@@ -52,7 +52,6 @@ module.exports = class JsonQL {
       queryObj.columns.length > 0 ? 
         queryObj.columns.map(col => {
 
-
           if(/^\w+\.\w+$/g.test(col.name)) return this.parseJoinObject(col);
           // Check the db, table and name here because we know that queryObj.name will be the right db and table for this col.name.
           let name = this.setNameString(db, table, col.name);
@@ -128,7 +127,7 @@ module.exports = class JsonQL {
 
   selectQL(queryObj) {
 
-    this.validateQueryObject(queryObj);
+    // this.validateQueryObject(queryObj);
     this.parseQueryObj(queryObj);
 
     let select = '';
@@ -183,7 +182,7 @@ module.exports = class JsonQL {
     const {db,table} = this.parseDbAndTableNames(queryObj.name);
     this.dbTableNames.push({db, table});
 
-    if(!this.schema[db][table]) {
+    if(!(this.schema[db] || {})[table]) {
       this.fatalError = true;
       this.errors.push(`${db}.${table} is not in the schema`);
       return;
@@ -219,11 +218,13 @@ module.exports = class JsonQL {
     const column = /^\w+$/;
     const string = /^['"`].+['"`]$/g;
     const func = /^\w+\=\>/;
+    const all = /\*/g;
 
     if(typeof name === 'number') return true;
 
     // TODO: the func get split by the spaces but that means an empty string comes out as seperate commas
     // rather than ' '. Youll have to do it by a regex instead including the string one above.
+    if(all.test(name)) return true;
     if(func.test(name) && this.funcValid(db, table, name)) return true;
     if(string.test(name) && this.plainStringValid(name)) return true;
     if(dbTableColumn.test(name) && this.dbTableColumnValid(name)) return true;
