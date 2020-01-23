@@ -203,6 +203,7 @@ module.exports = class JsonQL {
   pushPrimaryKey(db, table) {
     let tableSchema = this.schema[db][table];
     Object.keys(tableSchema).forEach(key => {
+      if(this.columns.includes(key)) return;
       if(tableSchema[key].primaryKey && typeof tableSchema[key].primaryKey === 'function') {
         if(tableSchema[key].type === 'json') {
           this.errors.push('primaryKey must be either number or string type, check your schema for ' + db + '.' + table);

@@ -10,30 +10,13 @@ async function main() {
 
   const jsonQL = new JsonQL(schema);
 
-  let queryObj = jsonQL.selectQL({
-    db: 'bms_booking',
-    table: 'bookings',
-    columns: [
-      {name: 'bookingName'},
-      {name: 'colorLabel'},
-      {name: '$jsonForm[0]', as: 'item1'},
-      {
-        fn: 'CONCAT',
-        args: [
-          {
-            name: '$jsonForm[0].label',
-          },
-          {
-            name: '$jsonForm[1].label'
-          },
-          {
-            name: '$jsonForm[1].value'
-          }
-        ],
-        as: 'labelName'
-      }
-    ],
-    limit: [0,5]
+  let queryObj = jsonQL.createQL({
+    db: 'bms_campaigns',
+    table: 'bookings'
+  }, {
+    tmpKey: '123',
+    bookingName: 'TESTING1',
+    bookingsKey: '123'
   });
 
   // Check the status of the returned object.
