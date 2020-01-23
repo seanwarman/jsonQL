@@ -76,10 +76,23 @@ That would give me space to simply create shorthands for many of the more labori
 We should start by creating a function that deals with a single **TableObject** level. It should create a full SELECT
 query with a WHERE.
 
+Now we have joins working but we'll want to validate all the column selections ect with the schema. The columns should
+be fairly easy because a `name` param is always either a single column or a db.table.
 
+db.table is easy to validate so we do that first. once that's done we save the db.table in a global array of objects {db,table}
+after that we can match up each column against these db and tables depending on where we are in the query.
 
+The `where` strings will be much more difficult to deal with. We'll have to first split the string into blocks and validate each on.
+The blocks will be.
 
+string = '"word"'; // < in this case we validate the string.
+number = '1'; // < no validation needed.
+column = 'word'; // < in this case we get the db.table from the parent name.
+table.column = 'word.word'; // < in this case we get the db from the parent name.
+db.table.column = 'word.word.word'; // < in this case we can just validate straight off.
+math = '=' || '>' || '<' || '>=' ... etc (look them up in mysql)
 
+Divide the string by spaces.
 
 
 
