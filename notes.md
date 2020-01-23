@@ -1,45 +1,93 @@
-We need to think of each object type as a block of code.
-
-const WhereObject = {
-    name: String/JQString,
-    string: String,
-    number: Number,
-    is: String/vName,
-    isnot: String/vName,
-    value: String/Number/JQString/QString
-    isbetween: [String/Number/vName, String/Number/vName]
-}
-
-const ColumnObject = {
-    name: String/JQString,
-    join: JoinObject,
-    count: JoinObject,
-    fn: String,
-    args: [WhereObject], << this is incorrect, we need to remove string from ColumnObjects and put WhereObject here with string instead.
-    as: String
-}
-
-const JoinObject = {
-    db: String,
-    table: String,
-    columns: [ColumnObject],
-    where: [WhereObject/[WhereObject]],
-    having: [WhereObject/[WhereObject]],
-    limit: [Number, Number],
-    orderBy: {name: String/JQString, desc: Boolean},
-}
-
-What's the difference between a WhereObject in a join and one thats in a main where?
-
-LEFT JOIN thisTable ON parentCol = thisCol/String/Number
-WHERE                  thisCol   =         String/Number
-
-They're totally different!
-
-I think we're going to have to admit defeat here but I do want to be able to do something with this qstring idea.
-
 ```js
-const WhereObject = {
-  {string: '$campaign.bookings.bookingsKey = \'123\''}
+const TableObject = {
+  name: String,
+  where: [String/[String]],
+  columns: [TableObject],
+  as: String
+}
+
+const query = {
+  name: 'bms_booking.booking',
+  where: [
+    'bookingsKey = "123"',
+    'created = "2019"'
+  ],
+  columns: [
+    {name: 'bookingName'},
+    {name: 'created'},
+    {
+      name: 'Biggly.users', 
+      where: [
+        'bms_booking.booking.createdUserKey = userKey'
+      ],
+      columns: [
+        {name: 'accessLevel'},
+        {name: 'concat=>firstName lastName', as: 'fullName'}
+      ]
+    }
+  ]
 }
 ```
+These could actually just be inline selects that repeat every time a column item is met.
+```sql
+SELECT
+bookingName,
+created,
+(SELECT accessLevel FROM Biggly.users WHERE bms_booking.booking.createdUserKey = userKey) as accessLevel, 
+-- ^ if no `as` value then use the `name` again.
+(SELECT CONCAT(firstName, " ", lastName) FROM Biggly.users WHERE bms_booking.booking.createdUserKey = userKey) as fullName
+FROM bms_booking.booking
+
+HAVING bookingsKey = "123" AND created = "2019" 
+-- ^ we could use HAVING rather than WHERE as it allows us to be more vague.
+```
+
+```js
+const query = {
+  name: 'bms_booking.booking',
+  where: [
+    'bookingName != "Bad Name"'
+  ]
+}
+
+const query = {
+  name: 'bms_booking.booking',
+  where: [ 'bookingsKey = "123"' ],
+  columns: [
+    {name: 'bookingName'},
+    {name: 'created'},
+    {
+      name: 'Biggly.uploads', 
+      where: [
+        'bms_booking.booking.bookingsKey = bookingsKey'
+      ],
+      columns: [
+        {name: 'count=>*', as: 'uploadCount'}
+      ]
+    }
+  ]
+}
+```
+We could leave much of the details up to the user about whether they put the where assignments in the right order
+or if the full db.table.column names are correctly selected.
+
+That would give me space to simply create shorthands for many of the more laborious aspects of mysql syntax.
+
+We should start by creating a function that deals with a single **TableObject** level. It should create a full SELECT
+query with a WHERE.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
