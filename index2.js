@@ -41,6 +41,9 @@ module.exports = class JsonQL {
 
           if(/^\w+\.\w+$/g.test(col.name)) return this.parseQueryObj(col);
           // Check the db, table and name here because we know that queryObj.name will be the right db and table for this col.name.
+          if(col.as) {
+            col.name += ` AS ${col.as}`;
+          }
           return col.name
         }).join() 
       : 
