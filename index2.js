@@ -30,8 +30,6 @@ module.exports = class JsonQL {
         joinObj.columns.map(col => {
 
           if(/^\w+\.\w+$/g.test(col.name)) return this.parseJoinObject(col);
-          // Check the db, table and name here because we know that joinObj.name will be the right db and table for this col.name.
-          console.log('col.name :', col.name);
           let name = this.setNameString(db, table, col.name);
           if(col.as) {
             name += ` AS ${col.as}`;
@@ -97,10 +95,8 @@ module.exports = class JsonQL {
   // ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
 
   setNameString(db, table, name) {
-    console.log('name :', name);
 
     if(/^\w+\=\>/.test(name)) {
-      console.log('passed!');
       return this.funcString(db, table, name);
     }
     if(/^$\w+/.test(name)) {
@@ -108,25 +104,31 @@ module.exports = class JsonQL {
     }
 
     return `${db}.${table}.${name}`;
-
   }
-  funcString(db, table, name) {
 
+  funcString(db, table, name) {
     const func = name.slice(0, name.indexOf('=>'))
 
-    const columns = name.slice(func.length + 2).split(' ');
+    let columns = name.slice(
+      func.length + 2
+    ).match(
+      /[\$\w.]+|['`"].+['`"]|\\|\+|>=|<=|=>|>|<|-|\*|=/g
+    );
 
     return `${func}(${columns.join()})`;
   }
+
   JQString(db, table, name) {
     return `${db}.${table}.${name}`;
   }
+
   // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
   // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
   // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
-  selectQL(queryObj) {
-    this.validateQueryObject(queryObj);
 
+  selectQL(queryObj) {
+
+    this.validateQueryObject(queryObj);
     this.parseQueryObj(queryObj);
 
     let select = '';
@@ -198,7 +200,7 @@ module.exports = class JsonQL {
     // Remove all invalid columns from the queryObject.
     queryObj.columns = queryObj.columns.filter(col => {
       const twoSelections = /^\w+\.\w+$/;
-      if(twoSelections.test(col.name) && this.dbTableSelection(col.name)) {
+      if(twoSelections.test(col.name) && this.dbTableValid(col.name)) {
         // Now check the nested object.
         this.validateQueryObject(col);
         return true;
@@ -208,24 +210,22 @@ module.exports = class JsonQL {
 
     // TODO: check the `is` params and the `as` params as well.
 
-
     return queryObj;
   }
 
   validateNameString(db, table, name) {
-    console.log('name :', name);
     const dbTableColumn = /^\w+\.\w+\.\w+$/;
     const tableColumn = /^\w+\.\w+$/;
     const column = /^\w+$/;
     const string = /^['"`].+['"`]$/g;
-    const func = /^\w+=>/;
+    const func = /^\w+\=\>/;
 
     if(typeof name === 'number') return true;
 
     // TODO: the func get split by the spaces but that means an empty string comes out as seperate commas
     // rather than ' '. Youll have to do it by a regex instead including the string one above.
-    if(func.test(name) && this.validFunc(db, table, name)) return true;
-    if(string.test(name) && this.validString(name)) return true;
+    if(func.test(name) && this.funcValid(db, table, name)) return true;
+    if(string.test(name) && this.plainStringValid(name)) return true;
     if(dbTableColumn.test(name) && this.dbTableColumnValid(name)) return true;
     if(tableColumn.test(name) && this.tableColumnValid(db, name)) return true;
     if(column.test(name) && this.columnValid(db, table, name)) return true;
@@ -244,7 +244,7 @@ module.exports = class JsonQL {
     parts.forEach(part => {
 
       // if the part meets any of these conditions it will go to true
-      if(string.test(part) && this.validString(part)) {
+      if(string.test(part) && this.plainStringValid(part)) {
         valid = true;
       }
       if(dbTableColumn.test(part) && this.dbTableColumnValid(part, false)) {
@@ -266,20 +266,19 @@ module.exports = class JsonQL {
 
     return valid;
   }
-  validFunc(db, table, name) {
-    console.log('name :', name);
+  funcValid(db, table, name) {
     const func = name.slice(0, name.indexOf('=>'))
-    let valid = true;
+    let valid = false;
     const columns = name.slice(func.length + 2).split(' ')
     columns.forEach(nm => {
       if(this.validateNameString(db, table, nm)){
-        valid = false;
+        valid = true;
       }
     });
     return valid;
   }
 
-  validString(string) {
+  plainStringValid(string) {
     const regex = /(drop )|;|(update )|( truncate)/gi;
     if(regex.test(string)) {
       this.errors.push('The string \'' + string + '\' is not allowed');
@@ -289,7 +288,12 @@ module.exports = class JsonQL {
       return true;
     }
   }
-  dbTableSelection(string) {
+
+  // █▀▀ █▀▀ █░░█ █▀▀ █▀▄▀█ █▀▀█   ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
+  // ▀▀█ █░░ █▀▀█ █▀▀ █░▀░█ █▄▄█   ░█▄█░ █▄▄█ █░░ ▀█▀ █░░█ █▄▄█ ░░█░░ ▀█▀ █░░█ █░░█
+  // ▀▀▀ ▀▀▀ ▀░░▀ ▀▀▀ ▀░░░▀ ▀░░▀   ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
+
+  dbTableValid(string) {
     // We don't want to push an error here because this could be a valid table.column
     let m = string.match(/\w+/g);
     if(!(this.schema[m[0]] || {})[m[1]]) {
