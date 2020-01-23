@@ -10,10 +10,71 @@ module.exports = class JsonQL {
     this.join = [];
 
     this.dbTableNames = [];
+    this.asNames = [];
   }
 
-  parseJoinObject(joinObj) {
+  // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
+  // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
+  // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
 
+  selectQL(queryObj) {
+
+    this.validateQueryObject(queryObj);
+    this.parseQueryObj(queryObj);
+
+    let select = '';
+    if(this.select.length > 0) {
+      select = `SELECT ${this.select}`;
+    }
+
+    let from = '';
+    if(this.from.length > 0) {
+      from = ` FROM ${this.from}`;
+    }
+
+    let join = '';
+    if(this.join.length > 0) {
+      join = ` ${this.join.map(j => j).join(' ')}`;
+    }
+
+    let where = '';
+    if(this.where.length > 0) {
+      where = ` HAVING ${this.where}`;
+    }
+
+    let limit = '';
+    if((this.limit || []).length > 0) {
+      limit = ` LIMIT ${this.limit}`;
+    }
+
+    if(this.fatalError) {
+      return {
+        status: 'error',
+        errors: this.errors,
+        query: ''
+      }
+    }
+
+    return {
+      status: 'success',
+      errors: this.errors,
+      query: `${select}${from}${join}${where}${limit}` 
+    }
+  }
+  create(queryObj) {
+    this.parseQueryObj(queryObj);
+  }
+  update(queryObj) {
+    this.parseQueryObj(queryObj);
+  }
+  delete(queryObj) {
+    this.parseQueryObj(queryObj);
+  }
+  // █▀▀█ █▀▀█ █▀▀█ █▀▀ █▀▀ █▀▀█ █▀▀
+  // █░░█ █▄▄█ █▄▄▀ ▀▀█ █▀▀ █▄▄▀ ▀▀█
+  // █▀▀▀ ▀░░▀ ▀░▀▀ ▀▀▀ ▀▀▀ ▀░▀▀ ▀▀▀
+
+  parseJoinObject(joinObj) {
     const {db, table} = this.parseDbAndTableNames(joinObj.name);
 
     this.join.push(
@@ -37,7 +98,7 @@ module.exports = class JsonQL {
           return name
         }).join() 
       : 
-      '*'
+      ''
     }`;
 
     const as = joinObj.as ? ` AS ${joinObj.as}` : '';
@@ -67,26 +128,11 @@ module.exports = class JsonQL {
     this.from = `${queryObj.name}`
 
     this.where = (queryObj.where || []).length > 0 ? `${queryObj.where.map(wh => {
-      // We have to do more complicated validation for the where strings but it'll basically
-      // amount to checking anything with 'commas' is a valid string and anything without 
-      // is in the schema.
-      // Maybe we could keep a simple list of db and table names to check all the values against as we go.
       if(wh.length && typeof wh === 'object') return wh.map(w => w).join(' OR ');
       return wh;
     }).join(' AND ')}` : '';
 
-  }
-
-  parseDbAndTableNames(name) {
-    const dbTable = /^\w+\.\w+$/
-    if(!dbTable.test(name)) {
-      this.fatalError = true;
-      return null;
-    }
-    return {
-      db: name.match(/^\w+|\w+$/g)[0],
-      table: name.match(/^\w+|\w+$/g)[1]
-    }
+    this.limit = queryObj.limit ? queryObj.limit.map(n => n).join() : '';
   }
 
   // █▀▀ ▀▀█▀▀ █▀▀█ ░▀░ █▀▀▄ █▀▀▀ █▀▀
@@ -98,8 +144,8 @@ module.exports = class JsonQL {
     if(/^\w+\=\>/.test(name)) {
       return this.funcString(db, table, name);
     }
-    if(/^$\w+/.test(name)) {
-      return this.JQString(db, table, name);
+    if(/^\$\w+/.test(name)) {
+      return this.jQExtract(db, table, name);
     }
 
     return `${db}.${table}.${name}`;
@@ -117,61 +163,63 @@ module.exports = class JsonQL {
     return `${func}(${columns.join()})`;
   }
 
-  JQString(db, table, name) {
-    return `${db}.${table}.${name}`;
+  // ░░▀ █▀▀█ █▀▀ ▀▀█▀▀ █▀▀█ ░▀░ █▀▀▄ █▀▀▀ █▀▀
+  // ░░█ █░░█ ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█ ▀▀█
+  // █▄█ ▀▀▀█ ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
+
+  jQExtract(db, table, jQStr) {
+    const regx = /(\$\w+)|(\[\d\])|(\.\w+)|(\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\])/g
+    const matches = jQStr.match(regx);
+    const name = `${db}.${table}.${matches[0].slice(1)}`
+    return `JSON_UNQUOTE(JSON_EXTRACT(${name}, ${this.jQStringMaker(name, matches)}))`;
   }
 
-  // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
-  // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
-  // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
+  jQStringMaker(name, matches) {
+    let result = matches.reduce((arr, match, i) => {
+      return [...arr, this.jQString(name, match, arr[i-1])];
+    }, []);
 
-  selectQL(queryObj) {
+    return result[result.length - 1];
+  }
 
-    // this.validateQueryObject(queryObj);
-    this.parseQueryObj(queryObj);
+  jQString(name, string, prevString) {
+    let nameReg = /\$\w+/;
+    let index = /\[\d\]/;
+    let target = /\.\w+/;
+    let search = /\[\?[\w\s@#:;{},.!"£$%^&*()/?|`¬\-=+~]*\]/;
 
-    let select = '';
-    if(this.select.length > 0) {
-      select = `SELECT ${this.select}`;
+    if(nameReg.test(string)) {
+      return `CONCAT("$")`;
     }
-
-    let from = '';
-    if(this.from.length > 0) {
-      from = ` FROM ${this.from}`;
+    if(index.test(string)) {
+      // 'index';
+      return `CONCAT(${prevString}, "${string}")`
     }
-
-    let join = '';
-    if(this.join.length > 0) {
-      join = ` ${this.join.map(j => j).join(' ')}`;
+    if(target.test(string)) {
+      // 'target';
+      return `CONCAT(${prevString}, "${string}")`
     }
-
-    let where = '';
-    if(this.where.length > 0) {
-      where = ` HAVING ${this.where}`;
+    if(search.test(string)) {
+      // 'search';
+      string = string.slice(2, -1);
+      return `CONCAT(${prevString}, CONCAT('[',SUBSTR(JSON_SEARCH(JSON_EXTRACT(${name}, "$"),'one','${string}'), 4,LOCATE(']',JSON_SEARCH(JSON_EXTRACT(${name}, "$"), 'one', '${string}'))-4),']'))`;
     }
+  }
 
-    if(this.fatalError) {
-      return {
-        status: 'error',
-        errors: this.errors,
-        query: ''
-      }
+  // █░░█ ▀▀█▀▀ ░▀░ █░░ ░▀░ ▀▀█▀▀ ░▀░ █▀▀ █▀▀
+  // █░░█ ░░█░░ ▀█▀ █░░ ▀█▀ ░░█░░ ▀█▀ █▀▀ ▀▀█
+  // ░▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░ ▀▀▀ ▀▀▀ ▀▀▀
+
+  parseDbAndTableNames(name) {
+    const dbTable = /^\w+\.\w+$/
+    if(!dbTable.test(name)) {
+      this.fatalError = true;
+      return null;
     }
-
     return {
-      status: 'success',
-      errors: this.errors,
-      query: `${select}${from}${join}${where}` 
+      db: name.match(/^\w+|\w+$/g)[0],
+      table: name.match(/^\w+|\w+$/g)[1]
     }
-  }
-  create(queryObj) {
-    this.parseQueryObj(queryObj);
-  }
-  update(queryObj) {
-    this.parseQueryObj(queryObj);
-  }
-  delete(queryObj) {
-    this.parseQueryObj(queryObj);
   }
 
   // ▀█░█▀ █▀▀█ █░░ ░▀░ █▀▀▄ █▀▀█ ▀▀█▀▀ ░▀░ █▀▀█ █▀▀▄
@@ -191,7 +239,7 @@ module.exports = class JsonQL {
     if(queryObj.where) {
       // Now to validate the where strings
       queryObj.where = queryObj.where.filter(wh => {
-        if(this.validWhereString(wh)) return true;
+        if(this.whereStringValid(wh)) return true;
         return false;
       });
     }
@@ -204,26 +252,27 @@ module.exports = class JsonQL {
         this.validateQueryObject(col);
         return true;
       }
-      return this.validateNameString(db, table, col.name);
+      if(col.as) {
+        return this.nameStringValid(db, table, col.name) && this.plainStringValid(col.as);
+      }
+      return this.nameStringValid(db, table, col.name)
     });
-
-    // TODO: check the `is` params and the `as` params as well.
 
     return queryObj;
   }
 
-  validateNameString(db, table, name) {
+  nameStringValid(db, table, name) {
     const dbTableColumn = /^\w+\.\w+\.\w+$/;
     const tableColumn = /^\w+\.\w+$/;
     const column = /^\w+$/;
     const string = /^['"`].+['"`]$/g;
     const func = /^\w+\=\>/;
     const all = /\*/g;
+    const jQString = /^\$\w+/;
 
     if(typeof name === 'number') return true;
 
-    // TODO: the func get split by the spaces but that means an empty string comes out as seperate commas
-    // rather than ' '. Youll have to do it by a regex instead including the string one above.
+    if(jQString.test(name) && this.jQStringValid(db, table, name)) return true;
     if(all.test(name)) return true;
     if(func.test(name) && this.funcValid(db, table, name)) return true;
     if(string.test(name) && this.plainStringValid(name)) return true;
@@ -233,7 +282,13 @@ module.exports = class JsonQL {
     return false;
   }
 
-  validWhereString(whStr) {
+  jQStringValid(db, table, jQString) {
+    const column = jQString.slice(1, jQString.search(/[\.\[]/));
+    if(!this.columnValid(db, table, column)) return false;
+    return true;
+  }
+
+  whereStringValid(whStr) {
     const parts = whStr.split(' ');
     let valid = false;
 
@@ -267,12 +322,13 @@ module.exports = class JsonQL {
 
     return valid;
   }
+
   funcValid(db, table, name) {
     const func = name.slice(0, name.indexOf('=>'))
     let valid = false;
     const columns = name.slice(func.length + 2).split(' ')
     columns.forEach(nm => {
-      if(this.validateNameString(db, table, nm)){
+      if(this.nameStringValid(db, table, nm)){
         valid = true;
       }
     });
@@ -302,6 +358,7 @@ module.exports = class JsonQL {
     }
     return true;
   }
+
   dbTableColumnValid(string, pushToErrors = true) {
     let m = string.match(/\w+/g);
     if(!((this.schema[m[0]] || {})[m[1]] || {})[m[2]]) {
@@ -310,6 +367,7 @@ module.exports = class JsonQL {
     }
     return true;
   }
+
   tableColumnValid(db, string, pushToErrors = true) {
     let m = string.match(/\w+/g);
     if(!((this.schema[db] || {})[m[0]] || {})[m[1]]) {
@@ -318,6 +376,7 @@ module.exports = class JsonQL {
     }
     return true;
   }
+
   columnValid(db, table, string, pushToErrors = true) {
     if(!((this.schema[db] || {})[table] || {})[string]) {
       if(pushToErrors) this.errors.push(`${db} ${table} ${string} column not in schema`);
