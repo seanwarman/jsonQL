@@ -10,86 +10,8 @@ module.exports = class JsonQL {
     this.join = [];
 
     this.dbTableNames = [];
-  // name: 'bms_campaigns.bookings',
-  // this name^ item will always target the db.table
-  // columns: [
-  //   {name: 'bookingName'} // will mean bms_campaigns.bookings.bookingName
-  //   {name: 'created'}
-  // it's columns will then always target the column names.
-  //   {name: 'Biggly.users ... }
-  // when we come to a dbTable type name we know this will be a join or subquery.
-  // and so any subsequent columns names will be Biggly.users.column
-  // ]
-
-
-    // let query = jsonQL.selectQL({
-    //   name: 'bms_campaigns.bookings',
-    //   columns: [
-    //     {name: 'bookingName', as: 'booky'},
-    //     {name: 'bookingsKey', as: 'keykey'},
-    //     {
-    //       name: 'Biggly.users',
-    //       columns: [
-    //         {name: 'firstName'}
-    //       ],
-    //       where: [
-    //         'createdUserKey = userKey'
-    //       ], 
-    //       as: 'userName'
-    //     }
-    //   ],
-    //   where: [
-    //     'bookingsKey = "123"'
-    //   ]
-    // });
   }
 
-  validateQueryObject(queryObj) {
-    const {db,table} = this.parseDbAndTableNames(queryObj.name);
-    this.dbTableNames.push({db, table});
-
-    if(!this.schema[db][table]) {
-      this.fatalError = true;
-      this.errors.push(`${db}.${table} is not in the schema`);
-      return;
-    }
-    // We have to check the where first so it'll still have the relevent db and table names
-    if(queryObj.where) {
-      // Now to validate the where strings
-      queryObj.where = queryObj.where.filter(wh => {
-        if(this.validWhereString(wh)) return true;
-        return false;
-      });
-    }
-
-    const dbTableColumn = /^\w+\.\w+\.\w+$/;
-    const twoSelections = /^\w+\.\w+$/;
-    const column = /^\w+$/;
-    const string = /^['"`].+['"`]$/g;
-
-    // Remove all invalid columns from the queryObject.
-    queryObj.columns = queryObj.columns.filter(col => {
-      if(typeof col.name === 'number') return true;
-
-      if(twoSelections.test(col.name) && this.dbTableSelection(col.name)) {
-        // Now check the nested object.
-        this.validateQueryObject(col);
-        return true;
-      }
-
-      if(string.test(col.name) && this.validString(col.name)) return true;
-      if(dbTableColumn.test(col.name) && this.dbTableColumnValid(col.name)) return true;
-      if(twoSelections.test(col.name) && this.tableColumnValid(db, col.name)) return true;
-      if(column.test(col.name) && this.columnValid(db, table, col.name)) return true;
-      return false;
-
-    });
-
-
-    return queryObj;
-  }
-  // We need to make another function that returns a string for the select and then also creates
-  // a string for the join, which can be added on to the end of the whole query at the build stage.
   parseJoinObject(joinObj) {
 
     const {db, table} = this.parseDbAndTableNames(joinObj.name);
@@ -109,7 +31,8 @@ module.exports = class JsonQL {
 
           if(/^\w+\.\w+$/g.test(col.name)) return this.parseJoinObject(col);
           // Check the db, table and name here because we know that joinObj.name will be the right db and table for this col.name.
-          let name = `${db}.${table}.${col.name}`
+          console.log('col.name :', col.name);
+          let name = this.setNameString(db, table, col.name);
           if(col.as) {
             name += ` AS ${col.as}`;
           }
@@ -131,9 +54,10 @@ module.exports = class JsonQL {
       queryObj.columns.length > 0 ? 
         queryObj.columns.map(col => {
 
+
           if(/^\w+\.\w+$/g.test(col.name)) return this.parseJoinObject(col);
           // Check the db, table and name here because we know that queryObj.name will be the right db and table for this col.name.
-          let name = `${db}.${table}.${col.name}`
+          let name = this.setNameString(db, table, col.name);
           if(col.as) {
             name += ` AS ${col.as}`;
           }
@@ -168,13 +92,41 @@ module.exports = class JsonQL {
     }
   }
 
+  // █▀▀ ▀▀█▀▀ █▀▀█ ░▀░ █▀▀▄ █▀▀▀ █▀▀
+  // ▀▀█ ░░█░░ █▄▄▀ ▀█▀ █░░█ █░▀█ ▀▀█
+  // ▀▀▀ ░░▀░░ ▀░▀▀ ▀▀▀ ▀░░▀ ▀▀▀▀ ▀▀▀
 
+  setNameString(db, table, name) {
+    console.log('name :', name);
+
+    if(/^\w+\=\>/.test(name)) {
+      console.log('passed!');
+      return this.funcString(db, table, name);
+    }
+    if(/^$\w+/.test(name)) {
+      return this.JQString(db, table, name);
+    }
+
+    return `${db}.${table}.${name}`;
+
+  }
+  funcString(db, table, name) {
+
+    const func = name.slice(0, name.indexOf('=>'))
+
+    const columns = name.slice(func.length + 2).split(' ');
+
+    return `${func}(${columns.join()})`;
+  }
+  JQString(db, table, name) {
+    return `${db}.${table}.${name}`;
+  }
   // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
   // █░░ █▄▄▀ █░░█ █░░█   █░▀░█ █▀▀ ░░█░░ █▀▀█ █░░█ █░░█ ▀▀█
   // ▀▀▀ ▀░▀▀ ░▀▀▀ ▀▀▀░   ▀░░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀▀▀░ ▀▀▀
   selectQL(queryObj) {
     this.validateQueryObject(queryObj);
-    // return;
+
     this.parseQueryObj(queryObj);
 
     let select = '';
@@ -225,6 +177,61 @@ module.exports = class JsonQL {
   // ░█▄█░ █▄▄█ █░░ ▀█▀ █░░█ █▄▄█ ░░█░░ ▀█▀ █░░█ █░░█
   // ░░▀░░ ▀░░▀ ▀▀▀ ▀▀▀ ▀▀▀░ ▀░░▀ ░░▀░░ ▀▀▀ ▀▀▀▀ ▀░░▀
 
+  validateQueryObject(queryObj) {
+    const {db,table} = this.parseDbAndTableNames(queryObj.name);
+    this.dbTableNames.push({db, table});
+
+    if(!this.schema[db][table]) {
+      this.fatalError = true;
+      this.errors.push(`${db}.${table} is not in the schema`);
+      return;
+    }
+    // We have to check the where first so it'll still have the relevent db and table names
+    if(queryObj.where) {
+      // Now to validate the where strings
+      queryObj.where = queryObj.where.filter(wh => {
+        if(this.validWhereString(wh)) return true;
+        return false;
+      });
+    }
+
+    // Remove all invalid columns from the queryObject.
+    queryObj.columns = queryObj.columns.filter(col => {
+      const twoSelections = /^\w+\.\w+$/;
+      if(twoSelections.test(col.name) && this.dbTableSelection(col.name)) {
+        // Now check the nested object.
+        this.validateQueryObject(col);
+        return true;
+      }
+      return this.validateNameString(db, table, col.name);
+    });
+
+    // TODO: check the `is` params and the `as` params as well.
+
+
+    return queryObj;
+  }
+
+  validateNameString(db, table, name) {
+    console.log('name :', name);
+    const dbTableColumn = /^\w+\.\w+\.\w+$/;
+    const tableColumn = /^\w+\.\w+$/;
+    const column = /^\w+$/;
+    const string = /^['"`].+['"`]$/g;
+    const func = /^\w+=>/;
+
+    if(typeof name === 'number') return true;
+
+    // TODO: the func get split by the spaces but that means an empty string comes out as seperate commas
+    // rather than ' '. Youll have to do it by a regex instead including the string one above.
+    if(func.test(name) && this.validFunc(db, table, name)) return true;
+    if(string.test(name) && this.validString(name)) return true;
+    if(dbTableColumn.test(name) && this.dbTableColumnValid(name)) return true;
+    if(tableColumn.test(name) && this.tableColumnValid(db, name)) return true;
+    if(column.test(name) && this.columnValid(db, table, name)) return true;
+    return false;
+  }
+
   validWhereString(whStr) {
     const parts = whStr.split(' ');
     let valid = false;
@@ -259,6 +266,19 @@ module.exports = class JsonQL {
 
     return valid;
   }
+  validFunc(db, table, name) {
+    console.log('name :', name);
+    const func = name.slice(0, name.indexOf('=>'))
+    let valid = true;
+    const columns = name.slice(func.length + 2).split(' ')
+    columns.forEach(nm => {
+      if(this.validateNameString(db, table, nm)){
+        valid = false;
+      }
+    });
+    return valid;
+  }
+
   validString(string) {
     const regex = /(drop )|;|(update )|( truncate)/gi;
     if(regex.test(string)) {
