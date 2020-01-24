@@ -10,7 +10,6 @@ module.exports = class JsonQL {
     this.join = [];
 
     this.dbTableNames = [];
-    this.asNames = [];
   }
 
   // █▀▀ █▀▀█ █░░█ █▀▀▄   █▀▄▀█ █▀▀ ▀▀█▀▀ █░░█ █▀▀█ █▀▀▄ █▀▀
