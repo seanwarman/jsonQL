@@ -289,6 +289,7 @@ module.exports = class JsonQL {
 
   whereStringValid(whStr) {
     const parts = whStr.split(' ');
+    // const parts = whStr.match(/[\$\w.]+|['`"].+['`"]|\\|\+|>=|<=|=>|>|<|-|\*|=/g);
     let valid = false;
 
     const dbTableColumn = /^\w+\.\w+\.\w+$/;
@@ -299,20 +300,24 @@ module.exports = class JsonQL {
     parts.forEach(part => {
 
       // if the part meets any of these conditions it will go to true
-      if(string.test(part) && this.plainStringValid(part)) {
+      if(this.plainStringValid(part)) {
         valid = true;
       }
-      if(dbTableColumn.test(part) && this.dbTableColumnValid(part, false)) {
-        valid = true;
-      }
-      this.dbTableNames.forEach(dbTObj => {
-        if(twoSelections.test(part) && this.tableColumnValid(dbTObj.db, part, false)) {
-          valid = true;
-        }
-        if(column.test(part) && this.columnValid(dbTObj.db, dbTObj.table, part, false)) {
-          valid = true;
-        }
-      });
+      //
+      // TODO: decide what you should do here this validation was causing more
+      // problems than it fixed but it should probably be little more rigerous than it is now.
+      //
+      // if(dbTableColumn.test(part) && this.dbTableColumnValid(part, false)) {
+      //   valid = true;
+      // }
+      // this.dbTableNames.forEach(dbTObj => {
+      //   if(twoSelections.test(part) && this.tableColumnValid(dbTObj.db, part, false)) {
+      //     valid = true;
+      //   }
+      //   if(column.test(part) && this.columnValid(dbTObj.db, dbTObj.table, part, false)) {
+      //     valid = true;
+      //   }
+      // });
       if(!valid) {
         this.errors.push(part + ' didnt pass validation');
         this.fatalError = true;
